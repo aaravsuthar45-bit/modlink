@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: modlink-mcp
+    runtime: python
+    plan: starter # or free (note: free tier sleeps on inactivity)
+    region: oregon # or ohio, frankfurt, singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.mcp_server
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: MCP_PUBLIC_URL
+        sync: false
+      - key: DASHBOARD_SECRET
+        generateValue: true

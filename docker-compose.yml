@@ -1,0 +1,98 @@
+services:
+
+  # ── MCP Gateway + Discord Bot ─────────────────────────────────────────────
+  modlink-mcp:
+    build: .
+    container_name: modlink-mcp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - DATABASE_URL=postgresql+asyncpg://modlink:${POSTGRES_PASSWORD:-modlink123}@postgres:5432/modlink
+    ports:
+      - "8000:8000"    # Expose only to reverse proxy in production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - mcp_data:/data
+    networks:
+      - modlink
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────
+  modlink-dashboard:
+    build: .
+    container_name: modlink-dashboard
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://modlink:${POSTGRES_PASSWORD:-modlink123}@postgres:5432/modlink
+    command: ["uvicorn", "app.dashboard:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - modlink
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: modlink-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: modlink
+      POSTGRES_USER: modlink
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-modlink123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - modlink
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U modlink -d modlink"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (for future distributed AutoMod state) ──────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: modlink-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - modlink
+
+  # ── Caddy reverse proxy ───────────────────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: modlink-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - modlink
+    profiles:
+      - production   # Only starts with: docker compose --profile production up
+
+volumes:
+  mcp_data:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  modlink:
+    driver: bridge

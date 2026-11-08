@@ -1,0 +1,26 @@
+# Caddyfile — ModLink MCP reverse proxy
+# Replace yourdomain.com with your actual domain.
+# Caddy auto-provisions TLS via Let's Encrypt.
+
+mcp.yourdomain.com {
+    # MCP Gateway (AI clients connect here)
+    reverse_proxy modlink-mcp:8000
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+}
+
+dashboard.yourdomain.com {
+    # Web dashboard (admin access — restrict with IP or auth layer)
+    reverse_proxy modlink-dashboard:8080
+
+    header {
+        X-Frame-Options DENY
+        -Server
+    }
+}
