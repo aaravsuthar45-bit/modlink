@@ -11,6 +11,7 @@ Allows server owners to:
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
+import base64
 import logging
 from pathlib import Path
 import re
@@ -44,6 +45,24 @@ MANAGE_GUILD_FLAG = 0x20    # MANAGE_GUILD
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
+def _get_client_id() -> str:
+    """Resolve Discord Client ID from settings, running bot, or DISCORD_TOKEN."""
+    if settings.discord_client_id:
+        return str(settings.discord_client_id).strip()
+    if bot.user:
+        return str(bot.user.id)
+    if settings.discord_token:
+        try:
+            part = settings.discord_token.split(".")[0]
+            part += "=" * (-len(part) % 4)
+            decoded = base64.b64decode(part).decode("utf-8")
+            if decoded.isdigit():
+                return decoded
+        except Exception:
+            pass
+    return ""
+
+
 def _clean_url(url: str) -> str:
     """Normalize URL and fix any accidental .onrender.co or duplicated .onrender.commm."""
     return re.sub(r"\.onrender\.co(?:m+)?(?=/|$)", ".onrender.com", url).rstrip("/")
@@ -64,9 +83,17 @@ def _get_public_base(request: Request) -> str:
     return _clean_url(base)
 
 
+def _get_redirect_uri(request: Request) -> str:
+    """Return the exact OAuth redirect URI, preferring settings.discord_redirect_uri."""
+    if settings.discord_redirect_uri:
+        return _clean_url(settings.discord_redirect_uri)
+    base = _get_public_base(request)
+    return _clean_url(f"{base}/auth/discord/callback")
+
+
 def _get_bot_invite_url(guild_id: Optional[str] = None) -> str:
     """Generate the Discord Bot invite URL with required administrator permissions."""
-    client_id = settings.discord_client_id or (str(bot.user.id) if bot.user else "")
+    client_id = _get_client_id()
     if not client_id:
         return "https://discord.com/developers/applications"
     perms = 8  # Administrator permission integer
@@ -199,12 +226,11 @@ async def auth_logout(request: Request) -> RedirectResponse:
 async def discord_login(request: Request) -> RedirectResponse:
     """Redirect user to Discord OAuth2 authorization screen."""
     base = _get_public_base(request)
-    client_id = settings.discord_client_id or (str(bot.user.id) if bot.user else "")
+    client_id = _get_client_id()
     if not client_id:
-        return HTMLResponse("<h3>Error: DISCORD_CLIENT_ID is not configured in .env</h3>", status_code=500)
+        return HTMLResponse("<h3>Error: DISCORD_CLIENT_ID or DISCORD_TOKEN is required</h3>", status_code=500)
 
-    redirect_uri = _clean_url(settings.discord_redirect_uri or f"{base}/auth/discord/callback")
-
+    redirect_uri = _get_redirect_uri(request)
     state = secrets.token_urlsafe(16)
     params = {
         "client_id": client_id,
@@ -216,7 +242,15 @@ async def discord_login(request: Request) -> RedirectResponse:
     }
     discord_auth_url = f"https://discord.com/oauth2/authorize?{urlencode(params)}"
     response = RedirectResponse(discord_auth_url, status_code=302)
-    response.set_cookie("oauth_state", state, httponly=True, max_age=600)
+    response.set_cookie(
+        "oauth_state",
+        state,
+        httponly=True,
+        samesite="lax",
+        secure=base.startswith("https"),
+        path="/",
+        max_age=600,
+    )
     return response
 
 
@@ -224,19 +258,25 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
     """Handle Discord OAuth callback, verify user & guilds, issue API key, and set 30-day session cookie."""
     code = request.query_params.get("code")
     error = request.query_params.get("error")
-    base = _get_public_base(request)
 
     if error or not code:
         return RedirectResponse(f"/?error={error or 'no_code'}", status_code=302)
 
-    client_id = settings.discord_client_id or (str(bot.user.id) if bot.user else "")
+    client_id = _get_client_id()
     client_secret = settings.discord_client_secret
-    redirect_uri = _clean_url(settings.discord_redirect_uri or f"{base}/auth/discord/callback")
+    redirect_uri = _get_redirect_uri(request)
 
     if not client_secret:
         return HTMLResponse("<h3>Error: DISCORD_CLIENT_SECRET is not configured in environment</h3>", status_code=500)
 
-    # 1. Exchange OAuth code for access token
+    # 1. Validate OAuth state if both cookie and param are present
+    expected_state = request.cookies.get("oauth_state")
+    received_state = request.query_params.get("state")
+    if expected_state and received_state and expected_state != received_state:
+        logger.warning("OAuth state mismatch: expected=%r received=%r", expected_state, received_state)
+        return RedirectResponse("/?error=invalid_state", status_code=302)
+
+    # 2. Exchange OAuth code for access token
     async with httpx.AsyncClient(timeout=15.0) as client:
         token_resp = await client.post(
             f"{DISCORD_API_BASE}/oauth2/token",
@@ -250,13 +290,13 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if token_resp.status_code != 200:
-            logger.error("Discord token exchange failed: %s", token_resp.text)
+            logger.error("Discord token exchange failed: %s\nredirect_uri used: %s", token_resp.text, redirect_uri)
             return RedirectResponse("/?error=token_exchange_failed", status_code=302)
 
         token_data = token_resp.json()
         user_access_token = token_data["access_token"]
 
-        # 2. Fetch user profile
+        # 3. Fetch user profile
         user_resp = await client.get(
             f"{DISCORD_API_BASE}/users/@me",
             headers={"Authorization": f"Bearer {user_access_token}"},
@@ -267,14 +307,14 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         avatar_hash = user_data.get("avatar")
         avatar_url = f"https://cdn.discordapp.com/avatars/{discord_user_id}/{avatar_hash}.png" if avatar_hash else "https://cdn.discordapp.com/embed/avatars/0.png"
 
-        # 3. Fetch user guilds
+        # 4. Fetch user guilds
         guilds_resp = await client.get(
             f"{DISCORD_API_BASE}/users/@me/guilds",
             headers={"Authorization": f"Bearer {user_access_token}"},
         )
         user_guilds = guilds_resp.json() if guilds_resp.status_code == 200 else []
 
-    # 4. Filter for guilds where user is Owner or has Administrator / Manage Guild permissions
+    # 5. Filter for guilds where user is Owner or has Administrator / Manage Guild permissions
     admin_guilds: List[dict] = []
     for g in user_guilds:
         perms = int(g.get("permissions", 0))
@@ -291,7 +331,7 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
     if not admin_guilds:
         return RedirectResponse("/?error=no_admin_guilds", status_code=302)
 
-    # 5. Check which of these guilds the bot is currently in
+    # 6. Check which of these guilds the bot is currently in
     bot_guild_ids = {str(bg.id) for bg in bot.guilds}
     admin_guilds_data = [
         {
@@ -304,24 +344,28 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         for g in admin_guilds
     ]
 
-    # 6. Generate an API Key for this user & bound to their authorized server IDs
+    # 7. Generate an API Key for this user & bound to their authorized server IDs
     admin_ids = [g["id"] for g in admin_guilds]
     raw_api_key = f"ml_live_{secrets.token_urlsafe(32)}"
     key_hash = _hash_key(raw_api_key)
 
     async with AsyncSessionLocal() as session:
-        # Check if user already has an active connection
-        existing = await session.execute(
+        # Check all existing active connections for this user and resolve duplicates
+        existing_result = await session.execute(
             select(AIConnection).where(
                 AIConnection.name == f"{discord_username}'s AI Connector",
                 AIConnection.status == ConnectionStatus.active,
             )
         )
-        existing_conn = existing.scalar_one_or_none()
+        existing_conns = existing_result.scalars().all()
 
-        if existing_conn:
+        if existing_conns:
+            existing_conn = existing_conns[0]
             existing_conn.allowed_guild_ids = admin_ids
             existing_conn.api_key_hash = key_hash
+            # Revoke any redundant duplicate active connections for this user
+            for extra in existing_conns[1:]:
+                extra.status = ConnectionStatus.revoked
         else:
             conn = AIConnection(
                 name=f"{discord_username}'s AI Connector",
@@ -334,7 +378,11 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
             )
             session.add(conn)
 
-        # 7. Create or update persistent 30-day session
+        # 8. Clean up any older sessions for this discord user and create a fresh 30-day session
+        await session.execute(
+            delete(UserSession).where(UserSession.discord_user_id == discord_user_id)
+        )
+
         session_token = secrets.token_urlsafe(32)
         expires = datetime.now(timezone.utc) + timedelta(days=30)
         user_sess = UserSession(
@@ -349,7 +397,7 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         session.add(user_sess)
         await session.commit()
 
-    # 8. Set persistent session cookie and redirect directly to /dashboard
+    # 9. Set persistent session cookie and redirect directly to /dashboard
     response = RedirectResponse("/dashboard", status_code=302)
     response.set_cookie(
         key="modlink_session",
@@ -359,6 +407,8 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         samesite="lax",
         path="/",
     )
+    # Clear the one-time oauth_state cookie so it can't be replayed
+    response.delete_cookie("oauth_state", path="/")
     return response
 
 

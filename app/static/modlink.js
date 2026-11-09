@@ -37,7 +37,7 @@ fetch('/auth/me')
     if(data && data.logged_in && data.user){
       window.ML_USER = data;
 
-      // Replace Log In button with user profile badge (avatar + username + logout)
+      // Replace Log In button in navbar with user profile badge (avatar + username + logout)
       document.querySelectorAll('.nav-links a[href*="/auth/discord/login"]').forEach(function(btn){
         var badge = document.createElement('div');
         badge.className = 'user-badge';
@@ -46,24 +46,6 @@ fetch('/auth/me')
                           '<a href="/auth/logout" class="btn btn-outline btn-sm user-logout-btn">Log out</a>';
         btn.replaceWith(badge);
       });
-
-      // Update Home page hero & CTA if present
-      var heroBtn = document.querySelector('.hero a[href*="/auth/discord/login"]');
-      if(heroBtn){
-        heroBtn.className = 'btn btn-primary btn-block';
-        heroBtn.href = '/dashboard';
-        heroBtn.innerHTML = svg('bolt') + 'Open Dashboard';
-        var stepDesc = heroBtn.previousElementSibling;
-        if(stepDesc && stepDesc.tagName === 'P'){
-          var gCount = (data.admin_guilds ? data.admin_guilds.length : 0);
-          stepDesc.innerHTML = '✓ Logged in as <strong>' + data.user.username + '</strong> with <strong>' + gCount + '</strong> administered server(s).';
-        }
-      }
-      var ctaBtn = document.querySelector('.cta a[href*="/auth/discord/login"]');
-      if(ctaBtn){
-        ctaBtn.href = '/dashboard';
-        ctaBtn.innerHTML = svg('bolt') + 'Open Dashboard';
-      }
 
       // If on Dashboard page, initialize user dashboard UI
       if(typeof window.initUserDashboard === 'function'){
