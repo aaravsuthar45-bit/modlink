@@ -3366,6 +3366,11 @@ def _register_custom_tools() -> None:
         logger.debug("Registered custom tool with MCPServer: %s", ct.name)
 
 
+# ── Register all modular tool categories ──────────────────────────────────────
+from app.modules import register_all_modules
+register_all_modules(mcp)
+
+
 # ── Build Starlette ASGI app ──────────────────────────────────────────────────
 
 def build_app() -> Starlette:

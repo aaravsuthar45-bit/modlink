@@ -237,3 +237,21 @@ class UserSession(Base):
     def __repr__(self) -> str:
         return f"<UserSession id={self.id!r} user={self.discord_username!r}>"
 
+
+class GenericStoreItem(Base):
+    """
+    General-purpose JSON document store for cases, tickets, appeals, automations,
+    backups, reputation, knowledge documents, and module state.
+    """
+    __tablename__ = "modlink_store"
+
+    id = Column(String(64), primary_key=True)
+    collection = Column(String(64), nullable=False, index=True)
+    guild_id = Column(String(32), nullable=True, index=True)
+    data = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<GenericStoreItem id={self.id!r} collection={self.collection!r}>"
+
