@@ -37,7 +37,7 @@ fetch('/auth/me')
     if(data && data.logged_in && data.user){
       window.ML_USER = data;
 
-      // Replace Log In button in navbar with user profile badge (avatar + username + logout)
+      // 1. Replace Log In button in navbar with user profile badge (avatar + username + logout)
       document.querySelectorAll('.nav-links a[href*="/auth/discord/login"]').forEach(function(btn){
         var badge = document.createElement('div');
         badge.className = 'user-badge';
@@ -47,7 +47,60 @@ fetch('/auth/me')
         btn.replaceWith(badge);
       });
 
-      // If on Dashboard page, initialize user dashboard UI
+      var inviteUrl = data.bot_invite_url || '';
+
+      // 2. Remove "Log in with Discord" from hero flow so it only shows "Invite bot to your server"
+      var heroLoginBtn = document.querySelector('.hero a[href*="/auth/discord/login"]');
+      if(heroLoginBtn){
+        var stepLi = heroLoginBtn.closest('li');
+        if(stepLi){
+          stepLi.remove();
+        } else {
+          heroLoginBtn.remove();
+        }
+        var inviteBtn = document.querySelector('.hero .box .flow a[href*="discord.com"], .hero .box .flow a[href*="invite"]');
+        if(inviteBtn){
+          inviteBtn.className = 'btn btn-primary btn-block';
+          inviteBtn.innerHTML = svg('plus') + 'Invite bot to your server';
+        }
+        var firstNum = document.querySelector('.hero .box .flow .num');
+        if(firstNum){
+          firstNum.style.display = 'none';
+        }
+      }
+
+      // 3. In CTA section: remove "Log in with Discord" and replace with "Invite bot to your server"
+      var ctaLoginBtn = document.querySelector('.cta a[href*="/auth/discord/login"]');
+      if(ctaLoginBtn){
+        if(inviteUrl){
+          ctaLoginBtn.href = inviteUrl;
+          ctaLoginBtn.target = '_blank';
+          ctaLoginBtn.rel = 'noopener noreferrer';
+          ctaLoginBtn.className = 'btn btn-light';
+          ctaLoginBtn.innerHTML = svg('plus') + 'Invite bot to your server';
+          var ctaP = ctaLoginBtn.previousElementSibling;
+          if(ctaP && ctaP.tagName === 'P'){
+            ctaP.textContent = 'Invite ModLink to your server, then open your dashboard to view your servers and AI credentials.';
+          }
+        } else {
+          ctaLoginBtn.remove();
+        }
+      }
+
+      // 4. Remove any other remaining "Log in with Discord" buttons across the site
+      document.querySelectorAll('a[href*="/auth/discord/login"]').forEach(function(btn){
+        if(btn.closest('#logged-out-view')) return;
+        if(inviteUrl){
+          btn.href = inviteUrl;
+          btn.target = '_blank';
+          btn.rel = 'noopener noreferrer';
+          btn.innerHTML = svg('plus') + 'Invite bot to your server';
+        } else {
+          btn.remove();
+        }
+      });
+
+      // 5. If on Dashboard page, initialize user dashboard UI
       if(typeof window.initUserDashboard === 'function'){
         window.initUserDashboard(data);
       }
