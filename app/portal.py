@@ -10,6 +10,7 @@ Allows server owners to:
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from typing import Dict, List, Optional
 from urllib.parse import urlencode
@@ -38,6 +39,11 @@ ADMIN_PERM_FLAG = 0x8       # ADMINISTRATOR
 MANAGE_GUILD_FLAG = 0x20    # MANAGE_GUILD
 
 
+def _clean_url(url: str) -> str:
+    """Normalize URL and fix any accidental .onrender.co or duplicated .onrender.commm."""
+    return re.sub(r"\.onrender\.co(?:m+)?(?=/|$)", ".onrender.com", url).rstrip("/")
+
+
 def _get_public_base(request: Request) -> str:
     """Return the base URL of this server (handling ngrok / Render proxies)."""
     if settings.mcp_public_url and "yourdomain.com" not in settings.mcp_public_url and "localhost" not in settings.mcp_public_url:
@@ -46,9 +52,7 @@ def _get_public_base(request: Request) -> str:
         host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "localhost:8000"
         proto = request.headers.get("x-forwarded-proto") or ("https" if "render" in host or "ngrok" in host else "http")
         base = f"{proto}://{host}"
-    if ".onrender.co" in base:
-        base = base.replace(".onrender.co", ".onrender.com")
-    return base.rstrip("/")
+    return _clean_url(base)
 
 
 def _get_bot_invite_url() -> str:
@@ -229,11 +233,7 @@ async def discord_login(request: Request) -> RedirectResponse:
     if not client_id:
         return HTMLResponse("<h3>Error: DISCORD_CLIENT_ID is not configured in .env</h3>", status_code=500)
     
-    redirect_uri = settings.discord_redirect_uri or f"{base}/auth/discord/callback"
-    if ".onrender.co" in redirect_uri:
-        redirect_uri = redirect_uri.replace(".onrender.co", ".onrender.com")
-    if ".onrender.co" in redirect_uri:
-        redirect_uri = redirect_uri.replace(".onrender.co", ".onrender.com")
+    redirect_uri = _clean_url(settings.discord_redirect_uri or f"{base}/auth/discord/callback")
     
     state = secrets.token_urlsafe(16)
     params = {
@@ -261,9 +261,7 @@ async def discord_callback(request: Request) -> HTMLResponse:
     
     client_id = settings.discord_client_id or (str(bot.user.id) if bot.user else "")
     client_secret = settings.discord_client_secret
-    redirect_uri = settings.discord_redirect_uri or f"{base}/auth/discord/callback"
-    if ".onrender.co" in redirect_uri:
-        redirect_uri = redirect_uri.replace(".onrender.co", ".onrender.com")
+    redirect_uri = _clean_url(settings.discord_redirect_uri or f"{base}/auth/discord/callback")
     
     if not client_secret:
         return HTMLResponse("<h3>Error: DISCORD_CLIENT_SECRET is not configured in .env</h3>", status_code=500)
