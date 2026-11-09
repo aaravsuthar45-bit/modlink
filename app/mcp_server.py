@@ -3379,6 +3379,71 @@ from app.modules import register_all_modules
 register_all_modules(mcp)
 
 
+async def _migrate_key_hashes() -> None:
+    """
+    Idempotent startup migration: rehash all AIConnection records whose
+    api_key_hash does not match the SHA-256 of the user's raw API key.
+    Runs in O(n) where n = number of active UserSession rows with an api_key.
+    Safe to run on every startup.
+    """
+    import hashlib as _hl
+    from app.database import AIConnection, UserSession, ConnectionStatus, PermissionLevel
+    from sqlalchemy import select as _sel
+
+    def _sha256(raw: str) -> str:
+        return _hl.sha256(raw.encode("utf-8")).hexdigest()
+
+    migrated = 0
+    async with AsyncSessionLocal() as session:
+        sess_res = await session.execute(
+            _sel(UserSession).where(UserSession.api_key.isnot(None))
+        )
+        user_sessions = sess_res.scalars().all()
+
+        for us in user_sessions:
+            if not us.api_key:
+                continue
+            correct_hash = _sha256(us.api_key)
+            conn_name = f"{us.discord_username}\'s AI Connector"
+
+            conn_res = await session.execute(
+                _sel(AIConnection).where(
+                    AIConnection.name == conn_name,
+                    AIConnection.status == ConnectionStatus.active,
+                )
+            )
+            conns = conn_res.scalars().all()
+
+            if not conns:
+                # Recreate missing connection
+                admin_guild_ids = [str(g.get("id")) for g in (us.admin_guilds or []) if g.get("id")]
+                new_conn = AIConnection(
+                    name=conn_name,
+                    description=f"Auto-recovered for {us.discord_username}",
+                    api_key_hash=correct_hash,
+                    allowed_guild_ids=admin_guild_ids,
+                    permission_level=PermissionLevel.admin,
+                    autonomous_mode=False,
+                    status=ConnectionStatus.active,
+                )
+                session.add(new_conn)
+                migrated += 1
+            else:
+                primary = conns[0]
+                if primary.api_key_hash != correct_hash:
+                    primary.api_key_hash = correct_hash
+                    migrated += 1
+                # Revoke duplicate connections
+                for dup in conns[1:]:
+                    dup.status = ConnectionStatus.revoked
+
+        if migrated:
+            await session.commit()
+            logger.info("Startup migration: updated %d API key hashes to SHA-256.", migrated)
+        else:
+            logger.info("Startup migration: all %d API key hashes are current.", len(user_sessions))
+
+
 # ── Build Starlette ASGI app ──────────────────────────────────────────────────
 
 def build_app() -> Starlette:
@@ -3613,7 +3678,13 @@ def build_app() -> Starlette:
         await init_db()
         asyncio.create_task(start_bot())
         await asyncio.sleep(1)
-        
+
+        # Migrate any stale key hashes to plain SHA-256 (idempotent, safe)
+        try:
+            await _migrate_key_hashes()
+        except Exception as _mig_exc:
+            logger.warning("Key hash migration failed: %s", _mig_exc)
+
         # Run MCP StreamableHTTP session manager task group
         session_mgr = getattr(mcp._lowlevel_server, "_session_manager", None)
         if session_mgr:
@@ -3621,7 +3692,7 @@ def build_app() -> Starlette:
                 yield
         else:
             yield
-            
+
         logger.info("ModLink MCP shutting down...")
 
     from starlette.middleware import Middleware

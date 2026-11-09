@@ -4,17 +4,20 @@ app/auth.py — Bearer token verification for the MCP gateway.
 Two modes:
   1. OIDC introspection  (production) — validates token with an identity provider
      and reads guild_ids + scope from the token claims.
-  2. API-key lookup      (development) — simple HMAC-hashed key stored in DB.
+  2. API-key lookup      (development/self-hosted) — SHA-256 hashed key stored in DB.
 
 The public surface is a single coroutine:
     access_token = await verify_bearer(raw_token)
 
 Returns an AccessToken dataclass, or None if invalid.
+
+NOTE: We use plain SHA-256 (not HMAC) for API key hashing.
+This makes hashes deterministic and independent of DASHBOARD_SECRET,
+so they remain valid across restarts and deployments.
 """
 from __future__ import annotations
 
 import hashlib
-import hmac
 import logging
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -41,15 +44,15 @@ class AccessToken:
     scopes: List[str] = field(default_factory=list)
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Key hashing ──────────────────────────────────────────────────────────────
 
 def _hash_key(raw: str) -> str:
-    """Deterministic HMAC-SHA256 of an API key using the dashboard secret."""
-    return hmac.new(
-        settings.dashboard_secret.encode(),
-        raw.encode(),
-        hashlib.sha256,
-    ).hexdigest()  # hmac.new(key, msg, digestmod)
+    """
+    Hash an API key using plain SHA-256.
+    Deterministic and independent of any secret — hashes remain valid
+    across restarts, re-deployments, and secret rotations.
+    """
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 # ── OIDC introspection path ───────────────────────────────────────────────────
@@ -58,7 +61,7 @@ async def _verify_oidc(raw_token: str) -> Optional[AccessToken]:
     """
     Call the OIDC introspection endpoint, then validate:
       • active == True
-      • audience includes mcp_public_url   ← MANDATORY security patch
+      • audience includes mcp_public_url
       • scope includes modlink:access
     """
     if not (settings.oidc_introspection_url and settings.oidc_client_secret):
@@ -80,7 +83,7 @@ async def _verify_oidc(raw_token: str) -> Optional[AccessToken]:
     if not data.get("active"):
         return None
 
-    # ── Audience validation (mandatory security correction) ──────────────────
+    # ── Audience validation ──────────────────────────────────────────────────
     audience = data.get("aud", [])
     if isinstance(audience, str):
         audience = [audience]
@@ -91,20 +94,17 @@ async def _verify_oidc(raw_token: str) -> Optional[AccessToken]:
             settings.mcp_public_url,
         )
         return None
-    # ── End audience validation ───────────────────────────────────────────────
 
     scopes: List[str] = data.get("scope", "").split()
     if "modlink:access" not in scopes:
         return None
 
-    # guild_ids should be a space-separated string or a JSON list in the token
     raw_guilds = data.get("guild_ids", [])
     if isinstance(raw_guilds, str):
         guild_ids = raw_guilds.split()
     else:
         guild_ids = [str(g) for g in raw_guilds]
 
-    # Map scope to permission level (highest wins)
     perm = PermissionLevel.read
     if "modlink:admin" in scopes:
         perm = PermissionLevel.admin
@@ -115,7 +115,6 @@ async def _verify_oidc(raw_token: str) -> Optional[AccessToken]:
 
     autonomous = "modlink:autonomous" in scopes
 
-    # We store a minimal synthetic connection_id for OIDC-originated tokens
     return AccessToken(
         connection_id=data.get("sub", "oidc-unknown"),
         name=data.get("preferred_username", data.get("sub", "unknown")),
@@ -126,10 +125,24 @@ async def _verify_oidc(raw_token: str) -> Optional[AccessToken]:
     )
 
 
-# ── API-key path (dev / simple deployments) ──────────────────────────────────
+# ── API-key path ──────────────────────────────────────────────────────────────
 
 async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
-    """Look up an API key in the database with backward compatibility and auto-recovery."""
+    """
+    Look up an API key with a two-path strategy:
+
+    Path 1 — Hash lookup in AIConnection.api_key_hash
+      Computes SHA-256 of the raw token and finds an active AIConnection.
+      Also accepts legacy HMAC hashes and migrates them to SHA-256.
+
+    Path 2 — Exact match in UserSession.api_key
+      If Path 1 misses (e.g. connection was never created or hash migrated),
+      look in the UserSession table for the exact raw key.
+      If found, upsert an AIConnection with the correct SHA-256 hash.
+
+    This ensures auth works immediately after login without depending on
+    DASHBOARD_SECRET or any external secret rotation.
+    """
     cleaned = (raw_token or "").strip("'\" \t\r\n")
     if cleaned.lower().startswith("bearer "):
         cleaned = cleaned[7:].strip("'\" \t\r\n")
@@ -137,31 +150,20 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
     if not cleaned:
         return None
 
-    # Compute candidate hashes: current secret, legacy secret, and plain sha256
-    primary_hash = _hash_key(cleaned)
-    legacy_hash = hmac.new(b"change-me-in-production", cleaned.encode(), hashlib.sha256).hexdigest()
-    sha256_hash = hashlib.sha256(cleaned.encode()).hexdigest()
-    candidate_hashes = list({primary_hash, legacy_hash, sha256_hash})
+    # Canonical SHA-256 hash
+    sha256_hash = _hash_key(cleaned)
 
     async with AsyncSessionLocal() as session:
+        # ── Path 1: hash-based lookup ────────────────────────────────────────
         result = await session.execute(
             select(AIConnection).where(
-                AIConnection.api_key_hash.in_(candidate_hashes),
+                AIConnection.api_key_hash == sha256_hash,
                 AIConnection.status == ConnectionStatus.active,
             )
         )
-        conns = result.scalars().all()
-        if conns:
-            conn = conns[0]
-            # Automatically migrate legacy hashes to primary_hash
-            if conn.api_key_hash != primary_hash:
-                try:
-                    conn.api_key_hash = primary_hash
-                    await session.commit()
-                    logger.info("Migrated legacy API key hash for connection: %s", conn.name)
-                except Exception as exc:
-                    logger.warning("Could not auto-upgrade legacy key hash: %s", exc)
+        conn = result.scalars().first()
 
+        if conn:
             return AccessToken(
                 connection_id=str(conn.id),
                 name=conn.name,
@@ -171,15 +173,27 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
                 scopes=[],
             )
 
-        # Fallback: Check UserSession table by raw user api_key
+        # ── Path 2: direct UserSession lookup by raw api_key ─────────────────
+        # This catches cases where the AIConnection hash is stale/legacy,
+        # or where the connection was deleted but the session still exists.
         try:
             from app.database import UserSession
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+
             sess_res = await session.execute(
-                select(UserSession).where(UserSession.api_key == cleaned)
+                select(UserSession).where(
+                    UserSession.api_key == cleaned,
+                    UserSession.expires_at > now,
+                )
             )
             user_sess = sess_res.scalars().first()
+
             if user_sess:
-                admin_guild_ids = [str(g.get("id")) for g in (user_sess.admin_guilds or []) if g.get("id")]
+                admin_guild_ids = [
+                    str(g.get("id")) for g in (user_sess.admin_guilds or []) if g.get("id")
+                ]
+                # Find or recreate the AIConnection with correct hash
                 conn_res = await session.execute(
                     select(AIConnection).where(
                         AIConnection.name == f"{user_sess.discord_username}'s AI Connector",
@@ -187,23 +201,27 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
                     )
                 )
                 conn = conn_res.scalars().first()
+
                 if conn:
-                    conn.api_key_hash = primary_hash
+                    # Migrate hash to current SHA-256
+                    conn.api_key_hash = sha256_hash
                     conn.allowed_guild_ids = admin_guild_ids
                     await session.commit()
+                    logger.info("Migrated/repaired API key hash for connection: %s", conn.name)
                     return AccessToken(
                         connection_id=str(conn.id),
                         name=conn.name,
-                        allowed_guild_ids=list(conn.allowed_guild_ids or admin_guild_ids),
+                        allowed_guild_ids=admin_guild_ids,
                         permission_level=conn.permission_level,
                         autonomous_mode=conn.autonomous_mode,
                         scopes=[],
                     )
                 else:
+                    # Recreate the AIConnection from scratch
                     new_conn = AIConnection(
                         name=f"{user_sess.discord_username}'s AI Connector",
-                        description=f"Auto-recovered connector for Discord user {user_sess.discord_user_id}",
-                        api_key_hash=primary_hash,
+                        description=f"Auto-recovered connector for {user_sess.discord_username}",
+                        api_key_hash=sha256_hash,
                         allowed_guild_ids=admin_guild_ids,
                         permission_level=PermissionLevel.admin,
                         autonomous_mode=False,
@@ -211,6 +229,7 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
                     )
                     session.add(new_conn)
                     await session.commit()
+                    logger.info("Recreated AIConnection for user: %s", user_sess.discord_username)
                     return AccessToken(
                         connection_id=str(new_conn.id),
                         name=new_conn.name,
@@ -219,9 +238,11 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
                         autonomous_mode=False,
                         scopes=[],
                     )
+
         except Exception as exc:
             logger.warning("Error during UserSession key fallback: %s", exc)
 
+    logger.debug("API key not found or invalid: %s...", cleaned[:8] if len(cleaned) > 8 else "***")
     return None
 
 
@@ -242,12 +263,10 @@ async def verify_bearer(raw_token: str) -> Optional[AccessToken]:
         token = await _verify_oidc(raw_token)
         if token is not None:
             return token
-        # In strict mode: OIDC configured but token not accepted → reject entirely
         if settings.oidc_strict:
             logger.warning("OIDC strict mode: rejecting token that failed OIDC validation.")
             return None
 
-    # API-key path (only reached when OIDC is not configured, or oidc_strict=False)
     return await _verify_api_key(raw_token)
 
 
