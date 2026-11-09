@@ -10,6 +10,7 @@ Allows server owners to:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import re
 import secrets
 from typing import Dict, List, Optional
@@ -20,7 +21,6 @@ import httpx
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse
 from starlette.routing import Route
-from sqlalchemy import select
 
 from app.auth import _hash_key
 from app.config import settings
@@ -38,6 +38,8 @@ DISCORD_API_BASE = "https://discord.com/api/v10"
 ADMIN_PERM_FLAG = 0x8       # ADMINISTRATOR
 MANAGE_GUILD_FLAG = 0x20    # MANAGE_GUILD
 
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+
 
 def _clean_url(url: str) -> str:
     """Normalize URL and fix any accidental .onrender.co or duplicated .onrender.commm."""
@@ -48,7 +50,6 @@ def _get_public_base(request: Request) -> str:
     """Return the base URL of this server (handling ngrok / Render proxies)."""
     if settings.mcp_public_url and "yourdomain.com" not in settings.mcp_public_url and "localhost" not in settings.mcp_public_url:
         url = settings.mcp_public_url
-        # Use removesuffix (Python 3.9+) logic — avoids rstrip() which strips chars, not substrings
         if url.endswith("/mcp"):
             base = url[:-4]
         else:
@@ -69,166 +70,56 @@ def _get_bot_invite_url() -> str:
     return f"https://discord.com/oauth2/authorize?client_id={client_id}&permissions={perms}&scope=bot%20applications.commands"
 
 
+def _load_template(name: str) -> str:
+    path = TEMPLATES_DIR / name
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return ""
+
+
 # ── Route handlers ────────────────────────────────────────────────────────────
 
 async def home(request: Request) -> HTMLResponse:
-    """Landing page with login button & bot invite."""
-    base = _get_public_base(request)
+    """Landing page with invite and login buttons."""
+    template = _load_template("index.html")
+    if not template:
+        return HTMLResponse("<h1>ModLink</h1><p>Website is loading...</p>")
     invite_url = _get_bot_invite_url()
-    
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ModLink — AI Discord Moderation Gateway</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {{
-            --bg: #0f1117;
-            --surface: #1a1d26;
-            --surface-hover: #232734;
-            --primary: #5865f2;
-            --primary-hover: #4752c4;
-            --text: #f0f2f5;
-            --text-muted: #9ba1b0;
-            --border: #2a2e3d;
-            --success: #3ba55d;
-        }}
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: 'Inter', -apple-system, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-        }}
-        .card {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            max-width: 580px;
-            width: 100%;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-            text-align: center;
-        }}
-        .logo {{
-            width: 72px;
-            height: 72px;
-            background: linear-gradient(135deg, #5865f2, #8547f2);
-            border-radius: 20px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 36px;
-            margin-bottom: 24px;
-        }}
-        h1 {{ font-size: 28px; font-weight: 800; margin-bottom: 12px; letter-spacing: -0.5px; }}
-        p.subtitle {{ color: var(--text-muted); font-size: 15px; line-height: 1.6; margin-bottom: 32px; }}
-        .btn {{
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            width: 100%;
-            padding: 14px 24px;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 600;
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: none;
-        }}
-        .btn-discord {{
-            background: var(--primary);
-            color: #fff;
-            margin-bottom: 12px;
-        }}
-        .btn-discord:hover {{ background: var(--primary-hover); transform: translateY(-1px); }}
-        .btn-secondary {{
-            background: transparent;
-            color: var(--text);
-            border: 1px solid var(--border);
-        }}
-        .btn-secondary:hover {{ background: var(--surface-hover); }}
-        .steps {{
-            margin-top: 36px;
-            padding-top: 28px;
-            border-top: 1px solid var(--border);
-            text-align: left;
-        }}
-        .steps h3 {{ font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 16px; }}
-        .step-item {{ display: flex; gap: 14px; margin-bottom: 14px; font-size: 14px; color: var(--text-muted); }}
-        .step-num {{
-            background: var(--surface-hover);
-            color: var(--primary);
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 12px;
-            flex-shrink: 0;
-        }}
-        .badge {{
-            display: inline-block;
-            background: rgba(88, 101, 242, 0.15);
-            color: #7983f5;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 16px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="logo">⚡</div>
-        <div><span class="badge">ModLink MCP Gateway</span></div>
-        <h1>Connect Your Discord Server</h1>
-        <p class="subtitle">
-            Authorize your Discord account to securely generate an AI connection key for Claude or ChatGPT.
-            Only servers where you have administrative access will be controllable.
-        </p>
+    # Replace {base} with empty string for root-relative paths, and set invite_url
+    rendered = template.replace("{base}", "").replace("{invite_url}", invite_url)
+    return HTMLResponse(rendered)
 
-        <a href="{base}/auth/discord/login" class="btn btn-discord">
-            <svg width="22" height="17" viewBox="0 0 127.14 96.36" fill="currentColor">
-                <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,45.91,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,45.91,96.12,53,91.08,65.69,84.69,65.69Z"/>
-            </svg>
-            Log in with Discord
-        </a>
 
-        <a href="{invite_url}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
-            ➕ First, invite Bot to your Server
-        </a>
+async def dashboard_page(request: Request) -> HTMLResponse:
+    """Web dashboard page for reviewing approvals, connections, and audit log."""
+    template = _load_template("dashboard.html")
+    if not template:
+        return HTMLResponse("<h1>Dashboard</h1><p>Dashboard template not found.</p>", status_code=404)
+    return HTMLResponse(template)
 
-        <div class="steps">
-            <h3>How it works</h3>
-            <div class="step-item">
-                <span class="step-num">1</span>
-                <span>Invite the bot to your Discord server with Administrator permission.</span>
-            </div>
-            <div class="step-item">
-                <span class="step-num">2</span>
-                <span>Log in with Discord to verify your server ownership or admin permissions.</span>
-            </div>
-            <div class="step-item">
-                <span class="step-num">3</span>
-                <span>Get your private MCP endpoint and token locked strictly to your servers.</span>
-            </div>
-        </div>
-    </div>
-</body>
-</html>"""
-    return HTMLResponse(html)
+
+async def privacy_page(request: Request) -> HTMLResponse:
+    """Privacy policy page."""
+    template = _load_template("privacy.html")
+    if not template:
+        return HTMLResponse("<h1>Privacy Policy</h1>", status_code=404)
+    return HTMLResponse(template)
+
+
+async def terms_page(request: Request) -> HTMLResponse:
+    """Terms of service page."""
+    template = _load_template("terms.html")
+    if not template:
+        return HTMLResponse("<h1>Terms of Service</h1>", status_code=404)
+    return HTMLResponse(template)
+
+
+async def not_found_page(request: Request, exc: Exception = None) -> HTMLResponse:
+    """Custom 404 page."""
+    template = _load_template("404.html")
+    if not template:
+        return HTMLResponse("<h1>404 Not Found</h1>", status_code=404)
+    return HTMLResponse(template, status_code=404)
 
 
 async def discord_login(request: Request) -> RedirectResponse:
@@ -237,9 +128,9 @@ async def discord_login(request: Request) -> RedirectResponse:
     client_id = settings.discord_client_id or (str(bot.user.id) if bot.user else "")
     if not client_id:
         return HTMLResponse("<h3>Error: DISCORD_CLIENT_ID is not configured in .env</h3>", status_code=500)
-    
+
     redirect_uri = _clean_url(settings.discord_redirect_uri or f"{base}/auth/discord/callback")
-    
+
     state = secrets.token_urlsafe(16)
     params = {
         "client_id": client_id,
@@ -260,17 +151,17 @@ async def discord_callback(request: Request) -> HTMLResponse:
     code = request.query_params.get("code")
     error = request.query_params.get("error")
     base = _get_public_base(request)
-    
+
     if error or not code:
-        return HTMLResponse(f"<h3>Authentication canceled or failed: {error or 'No code provided'}</h3><p><a href='{base}'>Try again</a></p>", status_code=400)
-    
+        return RedirectResponse(f"/?error={error or 'no_code'}", status_code=302)
+
     client_id = settings.discord_client_id or (str(bot.user.id) if bot.user else "")
     client_secret = settings.discord_client_secret
     redirect_uri = _clean_url(settings.discord_redirect_uri or f"{base}/auth/discord/callback")
-    
+
     if not client_secret:
-        return HTMLResponse("<h3>Error: DISCORD_CLIENT_SECRET is not configured in .env</h3>", status_code=500)
-    
+        return HTMLResponse("<h3>Error: DISCORD_CLIENT_SECRET is not configured in environment</h3>", status_code=500)
+
     # 1. Exchange OAuth code for access token
     async with httpx.AsyncClient(timeout=15.0) as client:
         token_resp = await client.post(
@@ -286,11 +177,11 @@ async def discord_callback(request: Request) -> HTMLResponse:
         )
         if token_resp.status_code != 200:
             logger.error("Discord token exchange failed: %s", token_resp.text)
-            return HTMLResponse(f"<h3>Failed to retrieve token from Discord</h3><pre>{token_resp.text}</pre>", status_code=400)
-        
+            return RedirectResponse("/?error=token_exchange_failed", status_code=302)
+
         token_data = token_resp.json()
         user_access_token = token_data["access_token"]
-        
+
         # 2. Fetch user profile
         user_resp = await client.get(
             f"{DISCORD_API_BASE}/users/@me",
@@ -301,7 +192,7 @@ async def discord_callback(request: Request) -> HTMLResponse:
         discord_user_id = str(user_data["id"])
         avatar_hash = user_data.get("avatar")
         avatar_url = f"https://cdn.discordapp.com/avatars/{discord_user_id}/{avatar_hash}.png" if avatar_hash else "https://cdn.discordapp.com/embed/avatars/0.png"
-        
+
         # 3. Fetch user guilds
         guilds_resp = await client.get(
             f"{DISCORD_API_BASE}/users/@me/guilds",
@@ -323,6 +214,9 @@ async def discord_callback(request: Request) -> HTMLResponse:
                 "icon": g.get("icon"),
             })
 
+    if not admin_guilds:
+        return RedirectResponse("/?error=no_admin_guilds", status_code=302)
+
     # 5. Check which of these guilds the bot is currently in
     bot_guild_ids = {str(bg.id) for bg in bot.guilds}
     connected_guilds = [g for g in admin_guilds if g["id"] in bot_guild_ids]
@@ -332,32 +226,37 @@ async def discord_callback(request: Request) -> HTMLResponse:
 
     if not connected_guilds:
         # User has admin on some servers, but the bot hasn't been invited to any of them yet
-        missing_list_html = "".join([f"<li><strong>{g['name']}</strong> (ID: {g['id']})</li>" for g in missing_bot_guilds[:5]])
+        missing_list_html = "".join([f"<li><strong>{g['name']}</strong> <span style='color:var(--muted)'>ID: {g['id']}</span></li>" for g in missing_bot_guilds[:5]])
         html = f"""<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Bot Not Joined — ModLink</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {{ font-family: 'Inter', sans-serif; background: #0f1117; color: #f0f2f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }}
-        .card {{ background: #1a1d26; border: 1px solid #2a2e3d; border-radius: 16px; max-width: 540px; width: 100%; padding: 36px; text-align: center; }}
-        h2 {{ margin-bottom: 12px; }}
-        p {{ color: #9ba1b0; font-size: 15px; margin-bottom: 20px; line-height: 1.5; }}
-        ul {{ text-align: left; background: #232734; padding: 16px 24px; border-radius: 10px; margin-bottom: 24px; color: #d1d5db; }}
-        .btn {{ display: inline-block; padding: 12px 24px; border-radius: 10px; font-weight: 600; text-decoration: none; background: #5865f2; color: #fff; }}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot Not Joined — ModLink</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/modlink.css">
+<script src="/static/modlink.js" defer></script>
 </head>
 <body>
-    <div class="card">
-        <h2>⚠️ Bot is not in your server yet</h2>
-        <p>Hi <strong>{discord_username}</strong>! We verified you have Admin permissions on your servers, but our bot is not yet a member in any of them:</p>
-        <ul>{missing_list_html or "<li>No administrative servers found.</li>"}</ul>
-        <p>Please invite the bot to your server first, then refresh this page to get your AI key!</p>
-        <a href="{invite_url}" target="_blank" class="btn">Invite Bot to Your Server</a>
-    </div>
-</body>
-</html>"""
+<header class="site"><div class="wrap bar">
+<a class="brand" href="/" aria-label="ModLink home"><span class="brand-mark"><i data-i="bolt"></i></span>ModLink</a>
+<nav class="nav-links"><a href="/">Home</a><a href="/dashboard">Dashboard</a></nav>
+</div></header>
+<main id="main"><div class="wrap" style="padding:48px 24px; max-width:680px;">
+<div class="box">
+<h2><i data-i="alert"></i> Bot is not in your server yet</h2>
+<p style="margin:16px 0; color:var(--body)">Hi <strong>{discord_username}</strong>! We verified your administrator permissions, but the ModLink bot has not been added to your server(s) yet:</p>
+<ul style="background:var(--paper); border:2px solid var(--ink); padding:16px 24px; margin-bottom:24px; line-height:1.8;">{missing_list_html}</ul>
+<p style="margin-bottom:24px; color:var(--muted)">Invite the bot to your server first, then refresh this page or log in again to generate your private AI key.</p>
+<div style="display:flex; gap:16px; flex-wrap:wrap;">
+<a href="{invite_url}" target="_blank" class="btn btn-primary"><i data-i="plus"></i>Invite Bot to Server</a>
+<a href="/auth/discord/login" class="btn btn-outline">Check Again</a>
+</div>
+</div>
+</div></main>
+<footer class="site"><div class="wrap"><p class="legal">&copy; <span data-year>2026</span> ModLink. All rights reserved.</p></div></footer>
+</body></html>"""
         return HTMLResponse(html)
 
     # 6. Generate an API Key for this user & bound to their authorized server IDs
@@ -379,7 +278,7 @@ async def discord_callback(request: Request) -> HTMLResponse:
         await session.commit()
 
     mcp_endpoint = f"{base}/mcp"
-    servers_html = "".join([f"<span class='server-pill'>🛡️ {g['name']}</span>" for g in connected_guilds])
+    servers_html = "".join([f"<span class='pill green' style='padding:4px 10px; font-size:13px; font-weight:600;'>🛡️ {g['name']}</span>" for g in connected_guilds])
 
     claude_desktop_json = f"""{{
   "mcpServers": {{
@@ -399,123 +298,106 @@ async def discord_callback(request: Request) -> HTMLResponse:
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connected — ModLink MCP</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {{
-            --bg: #0f1117;
-            --surface: #1a1d26;
-            --surface-hover: #232734;
-            --primary: #5865f2;
-            --text: #f0f2f5;
-            --text-muted: #9ba1b0;
-            --border: #2a2e3d;
-            --success: #3ba55d;
-        }}
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-        }}
-        .card {{
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            max-width: 640px;
-            width: 100%;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-        }}
-        .header {{ display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }}
-        .avatar {{ width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--primary); }}
-        .badge-success {{ background: rgba(59, 165, 93, 0.15); color: #4ade80; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }}
-        .server-list {{ margin: 16px 0; display: flex; flex-wrap: wrap; gap: 8px; }}
-        .server-pill {{ background: var(--surface-hover); border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }}
-        .box {{
-            background: #11131a;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px;
-            margin: 16px 0;
-            position: relative;
-        }}
-        .box-label {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 6px; font-weight: 700; }}
-        .code-val {{ font-family: 'JetBrains Mono', monospace; font-size: 13px; word-break: break-all; color: #a5b4fc; }}
-        .copy-btn {{
-            background: var(--primary);
-            color: #fff;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 8px;
-            transition: all 0.2s;
-        }}
-        .copy-btn:hover {{ background: #4752c4; }}
-        .notice {{ background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 8px; padding: 12px; font-size: 13px; color: #fef08a; margin-top: 20px; }}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connected — ModLink MCP</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/modlink.css">
+<script src="/static/modlink.js" defer></script>
+<style>
+.key-box {{
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    padding: 16px;
+    margin: 16px 0;
+}}
+.key-title {{
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 800;
+    color: var(--muted);
+    margin-bottom: 8px;
+}}
+.code-block {{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    background: var(--concrete);
+    padding: 12px;
+    border: 1px solid var(--line);
+    word-break: break-all;
+    white-space: pre-wrap;
+    color: var(--ink);
+}}
+</style>
 </head>
 <body>
-    <div class="card">
-        <div class="header">
-            <img src="{avatar_url}" class="avatar" alt="Avatar">
-            <div>
-                <h2>Welcome, {discord_username}!</h2>
-                <span class="badge-success">✓ Authorized Administrator</span>
-            </div>
-        </div>
+<header class="site"><div class="wrap bar">
+<a class="brand" href="/" aria-label="ModLink home"><span class="brand-mark"><i data-i="bolt"></i></span>ModLink</a>
+<nav class="nav-links"><a href="/">Home</a><a href="/dashboard">Dashboard</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
+</div></header>
 
-        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5;">
-            Your dedicated AI API key has been created. It is cryptographically isolated and permitted to moderate only the following server(s):
-        </p>
-        
-        <div class="server-list">
-            {servers_html}
-        </div>
-
-        <!-- MCP URL -->
-        <div class="box">
-            <div class="box-label">MCP Endpoint URL</div>
-            <div class="code-val" id="mcp-url">{mcp_endpoint}</div>
-            <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('mcp-url').innerText); this.innerText='Copied!';">Copy URL</button>
-        </div>
-
-        <!-- API Key -->
-        <div class="box">
-            <div class="box-label">Your Private API Key (x-api-key)</div>
-            <div class="code-val" id="api-key">{raw_api_key}</div>
-            <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('api-key').innerText); this.innerText='Copied!';">Copy Key</button>
-        </div>
-
-        <!-- Claude Desktop JSON -->
-        <div class="box">
-            <div class="box-label">Claude Desktop Configuration (claude_desktop_config.json)</div>
-            <pre class="code-val" id="claude-json" style="white-space: pre-wrap; font-size: 12px;">{claude_desktop_json}</pre>
-            <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('claude-json').innerText); this.innerText='Copied!';">Copy Config</button>
-        </div>
-
-        <div class="notice">
-            🔒 <strong>Security Note:</strong> Please save your API key now. It is hashed in the database and will not be displayed again.
-        </div>
+<main id="main"><div class="wrap" style="padding:48px 24px; max-width:760px;">
+<div class="panel">
+<div style="display:flex; align-items:center; gap:16px; margin-bottom:24px;">
+    <img src="{avatar_url}" style="width:56px; height:56px; border:2px solid var(--ink);" alt="Avatar">
+    <div>
+        <h1 style="font-size:1.75rem; font-weight:900;">Welcome, {discord_username}!</h1>
+        <span class="pill green">✓ Authorized Administrator</span>
     </div>
-</body>
-</html>"""
+</div>
+
+<p style="color:var(--body); margin-bottom:16px;">
+    Your dedicated AI connection key has been generated. It is cryptographically isolated and permitted to moderate only your authorized server(s):
+</p>
+
+<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:24px;">
+    {servers_html}
+</div>
+
+<!-- MCP URL -->
+<div class="key-box">
+    <div class="key-title">MCP Endpoint URL</div>
+    <div class="code-block" id="mcp-url">{mcp_endpoint}</div>
+    <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="navigator.clipboard.writeText(document.getElementById('mcp-url').innerText); this.innerText='Copied!';">Copy URL</button>
+</div>
+
+<!-- API Key -->
+<div class="key-box">
+    <div class="key-title">Your Private API Key (x-api-key)</div>
+    <div class="code-block" id="api-key">{raw_api_key}</div>
+    <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="navigator.clipboard.writeText(document.getElementById('api-key').innerText); this.innerText='Copied!';">Copy Key</button>
+</div>
+
+<!-- Claude Desktop JSON -->
+<div class="key-box">
+    <div class="key-title">Claude Desktop Configuration (claude_desktop_config.json)</div>
+    <div class="code-block" id="claude-json">{claude_desktop_json}</div>
+    <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="navigator.clipboard.writeText(document.getElementById('claude-json').innerText); this.innerText='Copied!';">Copy Config</button>
+</div>
+
+<div class="notice ok" style="margin-top:24px;">
+    <i></i><span><strong>Security Note:</strong> Please copy and save your API key now. It is stored as a secure hash in the database and will not be displayed again.</span>
+</div>
+
+<div style="margin-top:24px; text-align:center;">
+    <a href="/dashboard" class="btn btn-dark">Open ModLink Dashboard &rarr;</a>
+</div>
+</div>
+</div></main>
+
+<footer class="site"><div class="wrap"><p class="legal">&copy; <span data-year>2026</span> ModLink. All rights reserved. ModLink is not affiliated with or endorsed by Discord Inc.</p></div></footer>
+</body></html>"""
     return HTMLResponse(html)
 
 
 portal_routes = [
     Route("/", home, methods=["GET"]),
     Route("/connect", home, methods=["GET"]),
+    Route("/dashboard", dashboard_page, methods=["GET"]),
+    Route("/privacy", privacy_page, methods=["GET"]),
+    Route("/terms", terms_page, methods=["GET"]),
     Route("/auth/discord/login", discord_login, methods=["GET"]),
     Route("/auth/discord/callback", discord_callback, methods=["GET"]),
 ]

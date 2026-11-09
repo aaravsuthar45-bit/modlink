@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ModLink — AI Discord Moderation Gateway</title>
+<meta name="description" content="Connect your Discord server to Claude, ChatGPT or any MCP client through a private, permission-scoped moderation endpoint.">
+<meta name="theme-color" content="#FFFFFF">
+<meta property="og:title" content="ModLink — AI Discord Moderation Gateway">
+<meta property="og:description" content="Connect your Discord server to Claude, ChatGPT or any MCP client through a private, permission-scoped moderation endpoint.">
+<meta property="og:type" content="website">
+<link rel="icon" href="{base}/static/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{base}/static/modlink.css">
+<script src="{base}/static/modlink.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site"><div class="wrap bar">
+<a class="brand" href="{base}/" aria-label="ModLink home"><span class="brand-mark"><i data-i="bolt"></i></span>ModLink</a>
+<button class="nav-toggle" type="button" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav"><i data-i="menu"></i></button>
+<nav id="nav" class="nav-links" aria-label="Main"><a href="{base}/" aria-current="page">Home</a><a href="{base}/dashboard">Dashboard</a><a href="{base}/privacy">Privacy</a><a href="{base}/terms">Terms</a><a class="btn btn-primary btn-sm" href="{base}/auth/discord/login">Log in</a></nav>
+</div></header>
+<main id="main">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<h1><b>Moderate Discord</b><span>with your AI assistant</span></h1>
+<p class="lead">Connect Claude, ChatGPT or any MCP client to a private endpoint that only reaches the servers you administer.</p>
+</div>
+<div class="box">
+<div id="notice" class="notice" role="status" hidden><i></i><span></span></div>
+<h2>Connect your server</h2>
+<ol class="flow">
+<li><span class="num">1</span><div><h3>Invite the bot</h3><p>Add ModLink to your server with Administrator permission.</p>
+<a href="{invite_url}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-block"><i data-i="plus"></i>Invite bot to server</a></div></li>
+<li><span class="num">2</span><div><h3>Log in with Discord</h3><p>We check that you own or administer the server, then give you your private MCP endpoint and token.</p>
+<a href="{base}/auth/discord/login" class="btn btn-dark btn-block"><i data-i="discord"></i>Log in with Discord</a></div></li>
+</ol>
+</div>
+</div></section>
+
+<section class="band"><div class="wrap split">
+<h2>Built to be reined in</h2>
+<dl class="spec">
+<div><dt><i data-i="shield"></i>Locked to your servers</dt><dd>A token only works on servers where you have administrative access. Every other server stays out of reach.</dd></div>
+<div><dt><i data-i="key"></i>Four permission levels</dt><dd>Give each connection read, moderate, manage or admin access, and revoke it from the dashboard whenever you like.</dd></div>
+<div><dt><i data-i="log"></i>Approvals and audit log</dt><dd>Sensitive actions can wait for your approval. Every action is recorded with its tool, server, target and result.</dd></div>
+</dl></div></section>
+
+<section class="band"><div class="wrap split">
+<h2>What each level allows</h2>
+<dl class="spec">
+<div><dt>Read</dt><dd>View server information without changing anything.</dd></div>
+<div><dt>Moderate</dt><dd>Handle everyday moderation actions.</dd></div>
+<div><dt>Manage</dt><dd>Change roles, channels and settings.</dd></div>
+<div><dt>Admin</dt><dd>Full access to every tool.</dd></div>
+</dl></div></section>
+
+<section class="band"><div class="wrap split">
+<h2>Questions</h2>
+<div class="faq">
+<details><summary>Which servers can I control?</summary><p>Only servers where you have administrative access. ModLink checks this when you log in with Discord.</p></details>
+<details><summary>Where do I find my endpoint and token?</summary><p>After you log in with Discord, ModLink gives you a private MCP endpoint and token for your servers.</p></details>
+<details><summary>Can I stop an AI from acting on my server?</summary><p>Yes. Open the dashboard and select Revoke next to any connection.</p></details>
+<details><summary>Will the AI act without asking me?</summary><p>Actions that need approval appear under Pending approvals in the dashboard, where you can approve or reject them before they expire.</p></details>
+</div></div></section>
+
+<section class="cta"><div class="wrap">
+<h2>Connect a server in about a minute.</h2>
+<p>Invite the bot, log in with Discord, then paste your endpoint and token into your AI client.</p>
+<a href="{base}/auth/discord/login" class="btn btn-light"><i data-i="discord"></i>Log in with Discord</a>
+</div></section>
+</main>
+<footer class="site"><div class="wrap"><div class="foot">
+<div><a class="brand" href="{base}/" aria-label="ModLink home"><span class="brand-mark"><i data-i="bolt"></i></span>ModLink</a><p>A secure gateway that lets your AI assistant moderate your Discord server.</p></div>
+<div><h4>Product</h4><a href="{base}/">Home</a><a href="{base}/dashboard">Dashboard</a></div>
+<div><h4>Legal</h4><a href="{base}/privacy">Privacy Policy</a><a href="{base}/terms">Terms of Service</a><a href="mailto:support@modlink.app">support@modlink.app</a></div>
+</div><p class="legal">&copy; <span data-year>2026</span> ModLink. All rights reserved. ModLink is not affiliated with or endorsed by Discord Inc.</p></div></footer>
+</body></html>

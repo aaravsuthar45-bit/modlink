@@ -3515,45 +3515,81 @@ def build_app() -> Starlette:
 
     from starlette.middleware import Middleware
 
-    # Middleware to enforce API Key auth (supports x-api-key, Authorization, etc.)
+    # Middleware to enforce API Key auth on /mcp, and render custom 404 for website
     class ModLinkAuthMiddleware:
         def __init__(self, inner_app):
             self.inner_app = inner_app
 
         async def __call__(self, scope, receive, send):
-            if scope["type"] == "http":
-                path = scope.get("path", "")
-                # Only enforce auth on /mcp endpoints
-                if path.startswith("/mcp"):
-                    raw_token = None
-                    for key, val in scope.get("headers", []):
-                        k = key.decode("latin-1").lower()
-                        if k in ("x-api-key", "x-modlink-token", "x-auth-token", "authorization"):
-                            v = val.decode("latin-1").strip()
-                            raw_token = v[7:].strip() if v.lower().startswith("bearer ") else v
-                            break
+            if scope["type"] != "http":
+                await self.inner_app(scope, receive, send)
+                return
 
-                    if raw_token:
-                        ml_token = await verify_bearer(raw_token)
-                        if not ml_token:
-                            res = JSONResponse(
-                                {"error": "Unauthorized", "detail": "Invalid or revoked API Key"},
-                                status_code=401,
-                            )
-                            await res(scope, receive, send)
-                            return
-                        current_ml_token_var.set(ml_token)
-                    else:
-                        current_ml_token_var.set(None)
+            path = scope.get("path", "")
+            # Enforce API key auth on /mcp endpoints
+            if path.startswith("/mcp"):
+                raw_token = None
+                for key, val in scope.get("headers", []):
+                    k = key.decode("latin-1").lower()
+                    if k in ("x-api-key", "x-modlink-token", "x-auth-token", "authorization"):
+                        v = val.decode("latin-1").strip()
+                        raw_token = v[7:].strip() if v.lower().startswith("bearer ") else v
+                        break
 
-            await self.inner_app(scope, receive, send)
+                if raw_token:
+                    ml_token = await verify_bearer(raw_token)
+                    if not ml_token:
+                        res = JSONResponse(
+                            {"error": "Unauthorized", "detail": "Invalid or revoked API Key"},
+                            status_code=401,
+                        )
+                        await res(scope, receive, send)
+                        return
+                    current_ml_token_var.set(ml_token)
+                else:
+                    current_ml_token_var.set(None)
+                await self.inner_app(scope, receive, send)
+                return
 
-    from app.portal import portal_routes
+            # For non-mcp routes, capture 404s to render 404.html
+            status_code = None
+            resp_headers = []
+            resp_chunks = []
 
-    # Wrap the mcp app in an outer Starlette app so we can add /health, OAuth, portal, etc.
+            async def custom_send(message):
+                nonlocal status_code, resp_headers
+                if message["type"] == "http.response.start":
+                    status_code = message.get("status")
+                    resp_headers = message.get("headers", [])
+                elif message["type"] == "http.response.body":
+                    resp_chunks.append(message.get("body", b""))
+
+            await self.inner_app(scope, receive, custom_send)
+
+            if status_code == 404 and not path.startswith("/api") and not path.startswith("/static"):
+                from starlette.requests import Request
+                req = Request(scope)
+                res = await not_found_page(req)
+                await res(scope, receive, send)
+            else:
+                if status_code is not None:
+                    await send({"type": "http.response.start", "status": status_code, "headers": resp_headers})
+                    for chunk in resp_chunks:
+                        await send({"type": "http.response.body", "body": chunk})
+
+    from app.portal import portal_routes, not_found_page
+    from app.dashboard import app as dashboard_api_app
+    from starlette.staticfiles import StaticFiles
+    from pathlib import Path
+
+    static_dir = Path(__file__).parent / "static"
+
+    # Wrap the mcp app in an outer Starlette app so we can add /health, OAuth, portal, static, etc.
     app = Starlette(
         lifespan=lifespan,
         routes=[
+            Mount("/static", app=StaticFiles(directory=str(static_dir)), name="static"),
+            Mount("/api", app=dashboard_api_app),
             *portal_routes,
             Route("/health", health),
             Route("/.well-known/mcp", well_known),
@@ -3565,6 +3601,7 @@ def build_app() -> Starlette:
             Route("/token", oauth_token, methods=["POST"]),
             Mount("/", app=mcp_starlette),
         ],
+        exception_handlers={404: not_found_page},
         middleware=[Middleware(ModLinkAuthMiddleware)],
     )
     return app

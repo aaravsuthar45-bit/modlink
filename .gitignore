@@ -44,6 +44,10 @@ logs/
 # macOS
 .DS_Store
 
+# User upload archives
+files/
+files*/
+
 # Alembic
 migrations/versions/*.py
 !migrations/versions/.gitkeep
