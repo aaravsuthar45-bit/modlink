@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Security
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, update
 
 from app.config import settings
 from app.database import (
@@ -38,6 +38,7 @@ TEMPLATE_PATH = Path(__file__).parent / "templates" / "dashboard.html"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.validate_secrets()   # Fail closed if DASHBOARD_SECRET is weak/missing
     await init_db()
     yield
 
@@ -253,62 +254,106 @@ async def list_pending() -> dict:
 
 @router.post("/pending/{approval_id}/approve", dependencies=[DashboardAuth])
 @router.post("/api/pending/{approval_id}/approve", dependencies=[DashboardAuth])
-async def approve_action(approval_id: str) -> dict:
+async def approve_action(
+    approval_id: str,
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+) -> dict:
+    now = datetime.now(timezone.utc)
+    reviewer = "dashboard-operator"
+
     async with AsyncSessionLocal() as session:
+        # Atomic claim: UPDATE … WHERE approved IS NULL AND expires_at > now
+        # This prevents double-execution if two requests race.
         result = await session.execute(
-            select(PendingApproval).where(PendingApproval.id == approval_id)
+            update(PendingApproval)
+            .where(
+                PendingApproval.id == approval_id,
+                PendingApproval.approved.is_(None),
+                PendingApproval.expires_at > now,
+            )
+            .values(approved=True, reviewed_at=now, reviewed_by=reviewer)
+            .returning(PendingApproval)
         )
         pa = result.scalar_one_or_none()
+
         if pa is None:
-            raise HTTPException(404, "Approval request not found.")
-        if pa.approved is not None:
+            # Check why — distinguish not-found vs already-reviewed vs expired
+            check = await session.execute(
+                select(PendingApproval).where(PendingApproval.id == approval_id)
+            )
+            existing = check.scalar_one_or_none()
+            if existing is None:
+                raise HTTPException(404, "Approval request not found.")
+            if existing.expires_at <= now:
+                raise HTTPException(410, "Approval request has expired.")
             raise HTTPException(409, "Already reviewed.")
 
-        pa.approved = True
-        pa.reviewed_at = datetime.now(timezone.utc)
         await session.commit()
+        # Capture fields before session closes
+        pa_id = pa.id
+        pa_connection_id = pa.connection_id
+        pa_guild_id = pa.guild_id
+        pa_tool_name = pa.tool_name
+        pa_arguments = pa.arguments
 
-    # Execute the action now that it's approved
+    # Execute the approved action
     try:
         import sys
         mcp_mod = sys.modules.get("app.mcp_server")
         if not mcp_mod:
             import app.mcp_server as mcp_mod
-            
+
         from app.auth import AccessToken
         token = AccessToken(
-            connection_id=pa.connection_id or "dashboard",
+            connection_id=pa_connection_id or "dashboard",
             name="dashboard-approver",
-            allowed_guild_ids=[pa.guild_id],
+            allowed_guild_ids=[pa_guild_id],
             permission_level=PermissionLevel.admin,
             autonomous_mode=True,
         )
         mcp_mod.current_ml_token_var.set(token)
-        handler = getattr(mcp_mod, pa.tool_name, None)
+        handler = getattr(mcp_mod, pa_tool_name, None)
         if callable(handler):
-            await handler(**pa.arguments)
+            await handler(**(pa_arguments or {}))
     except Exception as exc:
-        logger.error("Failed to execute approved action %s: %s", approval_id, exc)
+        logger.error("Failed to execute approved action %s: %s", pa_id, exc)
         return {"status": "approved_but_execution_failed", "error": str(exc)}
 
-    return {"status": "approved_and_executed", "id": approval_id}
+    return {"status": "approved_and_executed", "id": pa_id}
 
 
 @router.post("/pending/{approval_id}/reject", dependencies=[DashboardAuth])
 @router.post("/api/pending/{approval_id}/reject", dependencies=[DashboardAuth])
-async def reject_action(approval_id: str) -> dict:
+async def reject_action(
+    approval_id: str,
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+) -> dict:
+    now = datetime.now(timezone.utc)
+    reviewer = "dashboard-operator"
+
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            select(PendingApproval).where(PendingApproval.id == approval_id)
+            update(PendingApproval)
+            .where(
+                PendingApproval.id == approval_id,
+                PendingApproval.approved.is_(None),
+                PendingApproval.expires_at > now,
+            )
+            .values(approved=False, reviewed_at=now, reviewed_by=reviewer)
+            .returning(PendingApproval)
         )
         pa = result.scalar_one_or_none()
         if pa is None:
-            raise HTTPException(404, "Approval request not found.")
-        if pa.approved is not None:
+            check = await session.execute(
+                select(PendingApproval).where(PendingApproval.id == approval_id)
+            )
+            existing = check.scalar_one_or_none()
+            if existing is None:
+                raise HTTPException(404, "Approval request not found.")
+            if existing.expires_at <= now:
+                raise HTTPException(410, "Approval request has expired.")
             raise HTTPException(409, "Already reviewed.")
 
-        pa.approved = False
-        pa.reviewed_at = datetime.now(timezone.utc)
         await session.commit()
 
     return {"status": "rejected", "id": approval_id}

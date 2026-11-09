@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 import base64
+import hmac
 import logging
 from pathlib import Path
 import re
@@ -91,13 +92,25 @@ def _get_redirect_uri(request: Request) -> str:
     return _clean_url(f"{base}/auth/discord/callback")
 
 
+# Scoped Bot Permissions (Integer: 1099914407062)
+# Requests only the permissions needed for moderation and AutoMod:
+#   - View Channels (1024), Send Messages (2048), Read Message History (65536)
+#   - Manage Messages (8192) — needed to delete spam/violations
+#   - Embed Links (16384), Attach Files (32768)
+#   - Moderate Members / Timeout (1099511627776)
+#   - Kick Members (2), Ban Members (4)
+#   - Manage Nicknames (134217728), Manage Roles (268435456), Manage Channels (16)
+#   - View Audit Log (128)
+# NOTE: Administrator (8) is NOT requested.
+REQUIRED_BOT_PERMISSIONS = 1099914407062
+
+
 def _get_bot_invite_url(guild_id: Optional[str] = None) -> str:
-    """Generate the Discord Bot invite URL with required administrator permissions."""
+    """Generate the Discord Bot invite URL with scoped moderation permissions."""
     client_id = _get_client_id()
     if not client_id:
         return "https://discord.com/developers/applications"
-    perms = 8  # Administrator permission integer
-    url = f"https://discord.com/oauth2/authorize?client_id={client_id}&permissions={perms}&scope=bot%20applications.commands"
+    url = f"https://discord.com/oauth2/authorize?client_id={client_id}&permissions={REQUIRED_BOT_PERMISSIONS}&scope=bot%20applications.commands"
     if guild_id:
         url += f"&guild_id={guild_id}&disable_guild_select=true"
     return url
@@ -269,11 +282,11 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
     if not client_secret:
         return HTMLResponse("<h3>Error: DISCORD_CLIENT_SECRET is not configured in environment</h3>", status_code=500)
 
-    # 1. Validate OAuth state if both cookie and param are present
+    # 1. Validate OAuth state — BOTH values must be present and match
     expected_state = request.cookies.get("oauth_state")
     received_state = request.query_params.get("state")
-    if expected_state and received_state and expected_state != received_state:
-        logger.warning("OAuth state mismatch: expected=%r received=%r", expected_state, received_state)
+    if not expected_state or not received_state or not hmac.compare_digest(expected_state, received_state):
+        logger.warning("OAuth state mismatch or missing: expected=%r received=%r", expected_state, received_state)
         return RedirectResponse("/?error=invalid_state", status_code=302)
 
     # 2. Exchange OAuth code for access token
@@ -398,6 +411,7 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         await session.commit()
 
     # 9. Set persistent session cookie and redirect directly to /dashboard
+    is_https = redirect_uri.startswith("https://")
     response = RedirectResponse("/dashboard", status_code=302)
     response.set_cookie(
         key="modlink_session",
@@ -405,6 +419,7 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         max_age=30 * 86400,  # 30 days
         httponly=True,
         samesite="lax",
+        secure=is_https,     # Secure flag whenever served over HTTPS
         path="/",
     )
     # Clear the one-time oauth_state cookie so it can't be replayed

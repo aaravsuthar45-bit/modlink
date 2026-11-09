@@ -311,27 +311,52 @@ async function loadAll() {
     btn.disabled = false; btn.textContent = 'Connect';
 }
 
-function pill(text, cls) { return '<span class="pill ' + cls + '">' + text + '</span>'; }
+// ── XSS-safe helpers ──────────────────────────────────────────────────────────
+// esc() escapes user-controlled text before inserting into HTML strings.
+// pill() wraps *safe* enum values only (never raw user text).
+function esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function pill(text, cls) {
+    // cls comes from our own enum maps — still escape text defensively
+    return '<span class="pill ' + esc(cls) + '">' + esc(text) + '</span>';
+}
 function permColor(p) { return { read:'blue', moderate:'yellow', manage:'yellow', admin:'red' }[p] || 'blue'; }
 function resultColor(r) { return { success:'green', denied:'red', error:'red' }[r] || 'blue'; }
 
 function renderPending(items) {
     var c = document.getElementById('pending-container');
-    if (!items.length) { c.innerHTML = '<div class="empty">No pending approvals.</div>'; return; }
-    c.innerHTML = '<table class="tbl">' +
-        '<thead><tr><th>Tool</th><th>Guild</th><th>Reason</th><th>Expires</th><th>Actions</th></tr></thead>' +
-        '<tbody>' + items.map(function(p) {
-            return '<tr>' +
-                '<td data-label="Tool">' + p.tool_name + '</td>' +
-                '<td data-label="Guild">' + p.guild_id + '</td>' +
-                '<td data-label="Reason">' + (p.reason || '—') + '</td>' +
-                '<td data-label="Expires">' + new Date(p.expires_at).toLocaleString() + '</td>' +
-                '<td data-label="Actions"><div class="row-actions">' +
-                    '<button class="btn btn-primary btn-sm" onclick="review(\'' + p.id + '\',\'approve\')">Approve</button>' +
-                    '<button class="btn btn-danger btn-sm" onclick="review(\'' + p.id + '\',\'reject\')">Reject</button>' +
-                '</div></td>' +
+    if (!items.length) { c.textContent = ''; c.innerHTML = '<div class="empty">No pending approvals.</div>'; return; }
+    // Build table using escaped text — reason and tool_name come from AI connections
+    var html = '<table class="tbl"><thead><tr><th>Tool</th><th>Guild</th><th>Reason</th><th>Expires</th><th>Actions</th></tr></thead><tbody>';
+    items.forEach(function(p) {
+        // Approval IDs are UUIDs from our own DB — safe to use in data attributes
+        html += '<tr>' +
+            '<td data-label="Tool">' + esc(p.tool_name) + '</td>' +
+            '<td data-label="Guild">' + esc(p.guild_id) + '</td>' +
+            '<td data-label="Reason">' + esc(p.reason || '—') + '</td>' +
+            '<td data-label="Expires">' + esc(new Date(p.expires_at).toLocaleString()) + '</td>' +
+            '<td data-label="Actions"><div class="row-actions">' +
+                '<button class="btn btn-primary btn-sm" data-id="' + esc(p.id) + '" data-act="approve">Approve</button>' +
+                '<button class="btn btn-danger btn-sm" data-id="' + esc(p.id) + '" data-act="reject">Reject</button>' +
+            '</div></td>' +
             '</tr>';
-        }).join('') + '</tbody></table>';
+    });
+    html += '</tbody></table>';
+    c.innerHTML = html;
+    // Attach event handlers via data attributes — no inline onclick needed
+    c.querySelectorAll('button[data-id]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            review(btn.dataset.id, btn.dataset.act);
+        });
+    });
 }
 
 async function review(id, action) {
@@ -345,19 +370,23 @@ async function review(id, action) {
 function renderConnections(items) {
     var c = document.getElementById('connections-container');
     if (!items.length) { c.innerHTML = '<div class="empty">No AI connections registered yet.</div>'; return; }
-    c.innerHTML = '<table class="tbl">' +
-        '<thead><tr><th>Name</th><th>Permission</th><th>Autonomous</th><th>Guilds</th><th>Status</th><th>Last seen</th><th></th></tr></thead>' +
-        '<tbody>' + items.map(function(conn) {
-            return '<tr>' +
-                '<td data-label="Name"><div><strong>' + conn.name + '</strong><br><small>' + (conn.description || '') + '</small></div></td>' +
-                '<td data-label="Permission">' + pill(conn.permission_level, permColor(conn.permission_level)) + '</td>' +
-                '<td data-label="Autonomous">' + (conn.autonomous_mode ? pill('yes','green') : pill('no','blue')) + '</td>' +
-                '<td data-label="Guilds">' + ((conn.allowed_guild_ids||[]).join(', ') || 'none') + '</td>' +
-                '<td data-label="Status">' + pill(conn.status, conn.status==='active'?'green':'red') + '</td>' +
-                '<td data-label="Last seen">' + (conn.last_seen_at ? new Date(conn.last_seen_at).toLocaleString() : '—') + '</td>' +
-                '<td data-label="Action"><button class="btn btn-danger btn-sm" onclick="revoke(\'' + conn.id + '\')">Revoke</button></td>' +
-            '</tr>';
-        }).join('') + '</tbody></table>';
+    var html = '<table class="tbl"><thead><tr><th>Name</th><th>Permission</th><th>Autonomous</th><th>Guilds</th><th>Status</th><th>Last seen</th><th></th></tr></thead><tbody>';
+    items.forEach(function(conn) {
+        html += '<tr>' +
+            '<td data-label="Name"><div><strong>' + esc(conn.name) + '</strong><br><small>' + esc(conn.description || '') + '</small></div></td>' +
+            '<td data-label="Permission">' + pill(conn.permission_level, permColor(conn.permission_level)) + '</td>' +
+            '<td data-label="Autonomous">' + (conn.autonomous_mode ? pill('yes','green') : pill('no','blue')) + '</td>' +
+            '<td data-label="Guilds">' + esc((conn.allowed_guild_ids||[]).join(', ') || 'none') + '</td>' +
+            '<td data-label="Status">' + pill(conn.status, conn.status==='active'?'green':'red') + '</td>' +
+            '<td data-label="Last seen">' + esc(conn.last_seen_at ? new Date(conn.last_seen_at).toLocaleString() : '—') + '</td>' +
+            '<td data-label="Action"><button class="btn btn-danger btn-sm" data-id="' + esc(conn.id) + '">Revoke</button></td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    c.innerHTML = html;
+    c.querySelectorAll('button[data-id]').forEach(function(btn) {
+        btn.addEventListener('click', function() { revoke(btn.dataset.id); });
+    });
 }
 
 async function revoke(id) {
@@ -372,18 +401,19 @@ async function revoke(id) {
 function renderAudit(logs) {
     var c = document.getElementById('audit-container');
     if (!logs.length) { c.innerHTML = '<div class="empty">No audit records yet.</div>'; return; }
-    c.innerHTML = '<table class="tbl">' +
-        '<thead><tr><th>Time</th><th>Tool</th><th>Guild</th><th>Target</th><th>Result</th><th>Detail</th></tr></thead>' +
-        '<tbody>' + logs.map(function(l) {
-            return '<tr>' +
-                '<td data-label="Time">' + new Date(l.created_at).toLocaleString() + '</td>' +
-                '<td data-label="Tool">' + l.tool_name + '</td>' +
-                '<td data-label="Guild">' + l.guild_id + '</td>' +
-                '<td data-label="Target">' + (l.target_user_id || '—') + '</td>' +
-                '<td data-label="Result">' + pill(l.result, resultColor(l.result)) + '</td>' +
-                '<td data-label="Detail">' + (l.result_detail || '') + '</td>' +
-            '</tr>';
-        }).join('') + '</tbody></table>';
+    var html = '<table class="tbl"><thead><tr><th>Time</th><th>Tool</th><th>Guild</th><th>Target</th><th>Result</th><th>Detail</th></tr></thead><tbody>';
+    logs.forEach(function(l) {
+        html += '<tr>' +
+            '<td data-label="Time">' + esc(new Date(l.created_at).toLocaleString()) + '</td>' +
+            '<td data-label="Tool">' + esc(l.tool_name) + '</td>' +
+            '<td data-label="Guild">' + esc(l.guild_id) + '</td>' +
+            '<td data-label="Target">' + esc(l.target_user_id || '—') + '</td>' +
+            '<td data-label="Result">' + pill(l.result, resultColor(l.result)) + '</td>' +
+            '<td data-label="Detail">' + esc(l.result_detail || '') + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    c.innerHTML = html;
 }
 </script>
 </body>

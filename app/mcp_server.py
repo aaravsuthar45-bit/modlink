@@ -3385,9 +3385,6 @@ def build_app() -> Starlette:
     import time, secrets
     from starlette.responses import RedirectResponse
 
-    _oauth_codes: Dict[str, str] = {}
-    DEFAULT_API_TOKEN = "3f8hb2HxQ3_YVrvJ98gDtlr2ohfhF8sm8Xoy5DNW9-76p0IAQc__Pxm1ImM93Qdq"
-
     async def health(request: Request) -> JSONResponse:
         # SECURITY: Don't expose total guild count — it leaks info about other users' servers
         return JSONResponse({
@@ -3448,56 +3445,63 @@ def build_app() -> Starlette:
         })
 
     async def oauth_register(request: Request) -> JSONResponse:
-        data = await request.json()
+        """
+        Dynamic Client Registration stub.
+        Returns a client_id so MCP clients can proceed, but no real client
+        is stored — authentication always requires a real API key via the
+        /auth/discord/login portal flow.
+        """
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        client_id = f"modlink-{secrets.token_urlsafe(8)}"
         return JSONResponse({
-            "client_id": "modlink-claude",
-            "client_secret": "modlink-secret-key",
+            "client_id": client_id,
             "client_id_issued_at": int(time.time()),
             "client_secret_expires_at": 0,
             "redirect_uris": data.get("redirect_uris", []),
-            "grant_types": ["authorization_code", "refresh_token"],
+            "grant_types": ["authorization_code"],
             "response_types": ["code"],
-            "client_name": data.get("client_name", "Claude"),
-            "token_endpoint_auth_method": "client_secret_post",
+            "client_name": data.get("client_name", "MCP Client"),
+            "token_endpoint_auth_method": "none",
         }, status_code=201)
 
     async def oauth_authorize(request: Request) -> RedirectResponse:
+        """
+        Authorization endpoint — redirect the user to ModLink's real Discord OAuth
+        login flow instead of issuing a fake code.
+        """
         params = request.query_params
         redirect_uri = params.get("redirect_uri", "")
         state = params.get("state", "")
-        code = secrets.token_urlsafe(32)
-        _oauth_codes[code] = DEFAULT_API_TOKEN
+        # Forward to the real Discord login; after login, the user gets a proper API key.
+        from app.portal import _get_public_base
+        base = _get_public_base(request)
         sep = "&" if "?" in redirect_uri else "?"
-        return RedirectResponse(f"{redirect_uri}{sep}code={code}&state={state}", status_code=302)
+        # Redirect to our real Discord OAuth with the original redirect_uri as next-hop
+        from urllib.parse import urlencode as _enc
+        return RedirectResponse(
+            f"{base}/auth/discord/login?" + _enc({"next": redirect_uri, "state": state}),
+            status_code=302,
+        )
 
     async def oauth_token(request: Request) -> JSONResponse:
-        code = None
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            try:
-                data = await request.json()
-                code = data.get("code")
-            except Exception:
-                pass
-        else:
-            try:
-                form = await request.form()
-                code = form.get("code")
-            except Exception:
-                pass
-
-        token_to_return = _oauth_codes.pop(code, DEFAULT_API_TOKEN) if code else DEFAULT_API_TOKEN
-        return JSONResponse({
-            "access_token": token_to_return,
-            "token_type": "Bearer",
-            "expires_in": 31536000,
-            "scope": "modlink:access modlink:read modlink:moderate modlink:manage modlink:admin",
-        })
+        """
+        Token endpoint — no code is valid here; users must use the portal login flow
+        to receive a real API key. Return an explicit error.
+        """
+        return JSONResponse(
+            {"error": "invalid_grant", "error_description": "Use the ModLink portal login to obtain an API key."},
+            status_code=400,
+        )
 
     from contextlib import asynccontextmanager
 
     @asynccontextmanager
     async def lifespan(app):
+        # Fail closed if DASHBOARD_SECRET is weak or missing
+        settings.validate_secrets()
         # Startup DB and Discord bot
         await init_db()
         asyncio.create_task(start_bot())

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     discord_token: str = Field("", description="Discord bot token")
     discord_client_id: Optional[str] = Field(None, description="Discord Application / Client ID for OAuth2")
     discord_client_secret: Optional[str] = Field(None, description="Discord OAuth2 Client Secret")
-    discord_redirect_uri: Optional[str] = Field(None, description="OAuth2 callback URL, e.g. https://your-domain.onrender.com/auth/discord/callback")
+    discord_redirect_uri: Optional[str] = Field(None, description="OAuth2 callback URL")
 
     # ── Database ─────────────────────────────────────────────
     database_url: str = Field(
@@ -49,10 +49,28 @@ class Settings(BaseSettings):
     oidc_client_id: Optional[str] = None
     oidc_client_secret: Optional[str] = None
 
+    # When True, disable API-key fallback and require OIDC-only auth (fail closed)
+    oidc_strict: bool = Field(
+        False,
+        description=(
+            "When True and OIDC is configured, reject API-key tokens entirely and "
+            "fail closed on OIDC errors. No fallback to local API-key lookup."
+        ),
+    )
+
     # ── Dashboard ────────────────────────────────────────────
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8080
-    dashboard_secret: str = "change-me-in-production"
+    # Empty default — the app will refuse to start if this remains unset/weak
+    dashboard_secret: str = Field(
+        "",
+        description=(
+            "Bearer secret for dashboard operator API. Must be a strong random value "
+            "(32+ chars). The application will refuse to start if this is empty or a "
+            "placeholder. Generate one with: "
+            "python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        ),
+    )
 
     # ── Redis (optional) ─────────────────────────────────────
     redis_url: Optional[str] = None
@@ -78,6 +96,32 @@ class Settings(BaseSettings):
     @property
     def is_sqlite(self) -> bool:
         return self.normalized_database_url.startswith("sqlite")
+
+    # ── Startup secret validation ─────────────────────────────
+    _PLACEHOLDER_SECRETS: frozenset = frozenset({
+        "",
+        "change-me-in-production",
+        "changeme",
+        "secret",
+        "password",
+        "dashboard-secret",
+        "placeholder",
+    })
+
+    def validate_secrets(self) -> None:
+        """
+        Call at application startup. Raises RuntimeError when DASHBOARD_SECRET is
+        missing, too short (<32 chars), or still a known placeholder string.
+        The app must not start with a weak secret — this keeps operator APIs closed.
+        """
+        val = (self.dashboard_secret or "").strip()
+        if val.lower() in self._PLACEHOLDER_SECRETS or len(val) < 32:
+            raise RuntimeError(
+                "DASHBOARD_SECRET is missing, too short, or still a placeholder value.\n"
+                "Set a strong random secret (32+ chars) in your environment before starting ModLink.\n"
+                "Generate one with:\n"
+                "  python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
 
 
 @lru_cache(maxsize=1)

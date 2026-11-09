@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time as _time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -44,11 +45,48 @@ class AutoModAction:
 
 # ── In-memory sliding-window store ───────────────────────────────────────────
 # guild_id → user_id → deque of (timestamp, content)
+#
+# OPERATIONAL SAFETY:
+#   • Max 500 guilds tracked simultaneously to bound memory.
+#   • Per guild, max 1000 active users tracked simultaneously.
+#   • Idle users (no activity for > MAX_IDLE_SECONDS) are pruned on each write.
 
 _message_windows: Dict[str, Dict[str, Deque[Tuple[float, str]]]] = defaultdict(
     lambda: defaultdict(deque)
 )
+_last_seen: Dict[str, Dict[str, float]] = defaultdict(dict)   # guild_id → user_id → timestamp
 _window_lock = asyncio.Lock()
+
+_MAX_GUILDS = 500
+_MAX_USERS_PER_GUILD = 1000
+_MAX_IDLE_SECONDS = 300   # prune users inactive for 5+ minutes
+
+
+def _prune_idle(gid: str, now: float) -> None:
+    """Remove users idle longer than MAX_IDLE_SECONDS (call inside _window_lock)."""
+    guild_last = _last_seen.get(gid, {})
+    idle_users = [uid for uid, ts in list(guild_last.items()) if now - ts > _MAX_IDLE_SECONDS]
+    for uid in idle_users:
+        _message_windows[gid].pop(uid, None)
+        guild_last.pop(uid, None)
+
+
+async def cleanup_idle_windows_loop(interval_seconds: int = 60) -> None:
+    """Periodically sweep all guilds and prune users idle > MAX_IDLE_SECONDS."""
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            now = datetime.now(timezone.utc).timestamp()
+            async with _window_lock:
+                for gid in list(_message_windows.keys()):
+                    _prune_idle(gid, now)
+                    if not _message_windows[gid]:
+                        _message_windows.pop(gid, None)
+                        _last_seen.pop(gid, None)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error("[AutoMod] Error in periodic window cleanup: %s", exc)
 
 
 SUSPICIOUS_LINK_PATTERN = re.compile(
@@ -77,9 +115,24 @@ async def _check_spam(
     threshold = config.spam_message_threshold
 
     async with _window_lock:
-        dq = _message_windows[gid][uid]
+        # Cap total guilds tracked to bound memory
+        if gid not in _message_windows and len(_message_windows) >= _MAX_GUILDS:
+            logger.warning("[AutoMod] Guild cache full (%d guilds), skipping spam check for %s", _MAX_GUILDS, gid)
+            return None
+
+        # Prune idle users before writing a new entry
+        _prune_idle(gid, now)
+
+        # Cap per-guild user count
+        guild_windows = _message_windows[gid]
+        if uid not in guild_windows and len(guild_windows) >= _MAX_USERS_PER_GUILD:
+            logger.warning("[AutoMod] User cache full for guild %s (%d users), skipping spam check for %s", gid, _MAX_USERS_PER_GUILD, uid)
+            return None
+
+        dq = guild_windows[uid]
         dq.append((now, message.content))
-        # Prune old entries
+        _last_seen[gid][uid] = now
+        # Prune old entries outside the sliding window
         while dq and now - dq[0][0] > window_secs:
             dq.popleft()
         count = len(dq)

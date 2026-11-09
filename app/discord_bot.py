@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Optional
 
 import discord
 from discord.ext import commands
 
-from app.automod import process_message
+from app.automod import process_message, cleanup_idle_windows_loop
 from app.config import settings
 from app.database import GuildConfig, AsyncSessionLocal, init_db
 from sqlalchemy import select
@@ -36,10 +37,16 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 # ── Events ────────────────────────────────────────────────────────────────────
 
+_cleanup_task: Optional[asyncio.Task] = None
+
+
 @bot.event
 async def on_ready() -> None:
+    global _cleanup_task
     logger.info("ModLink bot logged in as %s (id=%s)", bot.user, bot.user.id)
     await _sync_guilds()
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(cleanup_idle_windows_loop())
 
 
 @bot.event

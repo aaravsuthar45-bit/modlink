@@ -157,8 +157,11 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
 
 async def verify_bearer(raw_token: str) -> Optional[AccessToken]:
     """
-    Verify a bearer token.  Tries OIDC first if configured, falls back to
-    the local API-key lookup.
+    Verify a bearer token. Tries OIDC first if configured.
+
+    If OIDC is configured and oidc_strict=True, the API-key fallback is disabled
+    and an OIDC failure returns None immediately (fail closed).
+    If oidc_strict=False (default), falls back to API-key lookup.
     """
     if not raw_token:
         return None
@@ -167,8 +170,12 @@ async def verify_bearer(raw_token: str) -> Optional[AccessToken]:
         token = await _verify_oidc(raw_token)
         if token is not None:
             return token
+        # In strict mode: OIDC configured but token not accepted → reject entirely
+        if settings.oidc_strict:
+            logger.warning("OIDC strict mode: rejecting token that failed OIDC validation.")
+            return None
 
-    # Fallback (also the only path when OIDC is not configured)
+    # API-key path (only reached when OIDC is not configured, or oidc_strict=False)
     return await _verify_api_key(raw_token)
 
 
