@@ -233,14 +233,14 @@ async def discord_callback(request: Request) -> HTMLResponse:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bot Not Joined — ModLink</title>
-<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon.png" type="image/png">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/modlink.css">
 <script src="/static/modlink.js" defer></script>
 </head>
 <body>
 <header class="site"><div class="wrap bar">
-<a class="brand" href="/" aria-label="ModLink home"><span class="brand-mark"><i data-i="bolt"></i></span>ModLink</a>
+<a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a>
 <nav class="nav-links"><a href="/">Home</a><a href="/dashboard">Dashboard</a></nav>
 </div></header>
 <main id="main"><div class="wrap" style="padding:48px 24px; max-width:680px;">
@@ -301,7 +301,7 @@ async def discord_callback(request: Request) -> HTMLResponse:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Connected — ModLink MCP</title>
-<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon.png" type="image/png">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/modlink.css">
 <script src="/static/modlink.js" defer></script>
@@ -334,7 +334,7 @@ async def discord_callback(request: Request) -> HTMLResponse:
 </head>
 <body>
 <header class="site"><div class="wrap bar">
-<a class="brand" href="/" aria-label="ModLink home"><span class="brand-mark"><i data-i="bolt"></i></span>ModLink</a>
+<a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a>
 <nav class="nav-links"><a href="/">Home</a><a href="/dashboard">Dashboard</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
 </div></header>
 

@@ -3580,14 +3580,19 @@ def build_app() -> Starlette:
     from app.portal import portal_routes, not_found_page
     from app.dashboard import app as dashboard_api_app
     from starlette.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
     from pathlib import Path
 
     static_dir = Path(__file__).parent / "static"
+
+    async def favicon_route(request: Request) -> FileResponse:
+        return FileResponse(str(static_dir / "favicon.png"), media_type="image/png")
 
     # Wrap the mcp app in an outer Starlette app so we can add /health, OAuth, portal, static, etc.
     app = Starlette(
         lifespan=lifespan,
         routes=[
+            Route("/favicon.ico", favicon_route),
             Mount("/static", app=StaticFiles(directory=str(static_dir)), name="static"),
             Mount("/api", app=dashboard_api_app),
             *portal_routes,

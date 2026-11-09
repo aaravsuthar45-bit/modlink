@@ -16,6 +16,7 @@ i[data-i]{display:inline-flex;font-style:normal}
 header.site{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:2px solid var(--ink)}
 .bar{display:flex;align-items:center;gap:var(--s3);height:64px}
 .brand{display:flex;align-items:center;gap:var(--s2);font-weight:800;font-size:1.25rem;letter-spacing:-.03em;color:var(--ink);text-decoration:none}
+.brand-logo{width:28px;height:28px;object-fit:contain;border-radius:6px;display:block}
 .brand-mark{display:grid;place-items:center;color:var(--ink)}
 .brand-mark .ic{width:24px;height:24px}
 .nav-links{display:flex;align-items:stretch;gap:var(--s1);margin-left:auto;height:100%}
