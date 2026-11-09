@@ -168,3 +168,26 @@ p,li,dd{text-wrap:pretty}
 .toc h2{font-size:1rem;margin:0 0 var(--s2);padding:0;border:0}
 .toc ol{padding-left:var(--s4)}
 .toc li{margin:0 0 var(--s1)}
+
+/* user badge & nav */
+.user-badge{display:flex;align-items:center;gap:var(--s2);margin-left:var(--s3);align-self:center}
+.user-avatar{width:32px;height:32px;border-radius:50%;border:2px solid var(--ink);object-fit:cover;display:block}
+.user-name{font-weight:700;font-size:.9375rem;color:var(--ink);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-logout-btn{margin-left:var(--s2)}
+@media(max-width:760px){
+.user-badge{margin:var(--s3) 0 0;padding-top:var(--s2);border-top:1px solid var(--line);width:100%}
+.user-name{max-width:none}}
+
+/* user dashboard */
+.user-profile-bar{display:flex;align-items:center;gap:var(--s3);padding:var(--s4);background:var(--concrete);border:2px solid var(--ink);margin-bottom:var(--s4)}
+.user-profile-avatar{width:56px;height:56px;border-radius:50%;border:2px solid var(--ink);object-fit:cover}
+.user-profile-info h2{font-size:1.5rem;font-weight:900;letter-spacing:-.03em}
+.server-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--s3);margin-top:var(--s3)}
+.server-card{background:var(--paper);border:2px solid var(--ink);padding:var(--s3);display:flex;flex-direction:column;gap:var(--s2)}
+.server-card-head{display:flex;align-items:center;gap:var(--s2)}
+.server-icon{width:40px;height:40px;border-radius:50%;border:2px solid var(--ink);background:var(--concrete);display:grid;place-items:center;font-weight:800;font-size:1.125rem;flex:none;object-fit:cover}
+.server-title{font-weight:800;font-size:1rem;color:var(--ink);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.server-id{font-size:.75rem;color:var(--muted);font-family:monospace}
+.server-actions{margin-top:auto;padding-top:var(--s2);display:flex;align-items:center;justify-content:space-between;gap:var(--s2)}
+.code-box{background:var(--concrete);border:1px solid var(--line);padding:var(--s3);font-family:monospace;font-size:.8125rem;word-break:break-all;white-space:pre-wrap;color:var(--ink);margin:var(--s2) 0}
+

@@ -217,3 +217,23 @@ class PendingApproval(Base):
 
     def __repr__(self) -> str:
         return f"<PendingApproval id={self.id!r} tool={self.tool_name!r}>"
+
+
+class UserSession(Base):
+    """
+    Stores authenticated Discord user sessions for web dashboard and cookie persistence.
+    """
+    __tablename__ = "user_sessions"
+
+    id = Column(String(64), primary_key=True)  # Secure session token
+    discord_user_id = Column(String(32), nullable=False, index=True)
+    discord_username = Column(String(100), nullable=False)
+    avatar_url = Column(String(255), nullable=True)
+    admin_guilds = Column(JSON, nullable=False, default=list)  # list of {id, name, icon, bot_joined}
+    api_key = Column(String(128), nullable=True)  # Raw user API key for dashboard one-click copy
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<UserSession id={self.id!r} user={self.discord_username!r}>"
+

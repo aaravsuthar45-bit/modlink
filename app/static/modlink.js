@@ -4,10 +4,13 @@ var D='M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68
 function svg(n){return n==='discord'?'<svg class="ic" style="width:22px;fill:currentColor;stroke:none" viewBox="0 0 127.14 96.36" aria-hidden="true"><path d="'+D+'"/></svg>':'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">'+(P[n]||'')+'</svg>'}
 function icons(r){(r||document).querySelectorAll('[data-i]:empty').forEach(function(e){e.innerHTML=svg(e.dataset.i)})}
 window.ML={svg:svg,icons:icons};
+
 document.addEventListener('DOMContentLoaded',function(){
 icons();
-if(location.protocol==='file:')document.querySelectorAll('a[href^="/"]').forEach(function(a){var h=a.getAttribute('href');if(h.indexOf('/auth')===0)return;a.setAttribute('href',h==='/'?'index.html':h.slice(1)+'.html')});
+
 document.querySelectorAll('[data-year]').forEach(function(e){e.textContent=new Date().getFullYear()});
+
+// Mobile menu toggle
 var b=document.querySelector('.nav-toggle'),n=document.getElementById('nav');
 if(b&&n){
 function set(o){n.classList.toggle('open',o);b.setAttribute('aria-expanded',o);b.firstElementChild.innerHTML=svg(o?'x':'menu')}
@@ -15,6 +18,8 @@ b.addEventListener('click',function(){set(!n.classList.contains('open'))});
 document.addEventListener('keydown',function(e){if(e.key==='Escape')set(false)});
 n.addEventListener('click',function(e){if(e.target.closest('a'))set(false)});
 window.addEventListener('resize',function(){if(innerWidth>760)set(false)});}
+
+// Notice handler
 var box=document.getElementById('notice');
 if(box){
 var q=new URLSearchParams(location.search),er=q.get('error'),ok=q.get('success');
@@ -24,4 +29,47 @@ box.className='notice '+(er?'err':'ok');
 box.firstElementChild.innerHTML=svg(er?'alert':'check');
 box.lastElementChild.textContent=er?(M[er]||'Something went wrong while connecting to Discord. Please try again.'):(M[ok]||'Connected successfully.');
 box.hidden=false;}}
+
+// Check Discord user session via cookie
+fetch('/auth/me')
+  .then(function(res){ return res.ok ? res.json() : {logged_in:false}; })
+  .then(function(data){
+    if(data && data.logged_in && data.user){
+      window.ML_USER = data;
+
+      // Replace Log In button with user profile badge (avatar + username + logout)
+      document.querySelectorAll('.nav-links a[href*="/auth/discord/login"]').forEach(function(btn){
+        var badge = document.createElement('div');
+        badge.className = 'user-badge';
+        badge.innerHTML = '<img class="user-avatar" src="' + data.user.avatar + '" alt="' + data.user.username + '">' +
+                          '<span class="user-name">' + data.user.username + '</span>' +
+                          '<a href="/auth/logout" class="btn btn-outline btn-sm user-logout-btn">Log out</a>';
+        btn.replaceWith(badge);
+      });
+
+      // Update Home page hero & CTA if present
+      var heroBtn = document.querySelector('.hero a[href*="/auth/discord/login"]');
+      if(heroBtn){
+        heroBtn.className = 'btn btn-primary btn-block';
+        heroBtn.href = '/dashboard';
+        heroBtn.innerHTML = svg('bolt') + 'Open Dashboard';
+        var stepDesc = heroBtn.previousElementSibling;
+        if(stepDesc && stepDesc.tagName === 'P'){
+          var gCount = (data.admin_guilds ? data.admin_guilds.length : 0);
+          stepDesc.innerHTML = '✓ Logged in as <strong>' + data.user.username + '</strong> with <strong>' + gCount + '</strong> administered server(s).';
+        }
+      }
+      var ctaBtn = document.querySelector('.cta a[href*="/auth/discord/login"]');
+      if(ctaBtn){
+        ctaBtn.href = '/dashboard';
+        ctaBtn.innerHTML = svg('bolt') + 'Open Dashboard';
+      }
+
+      // If on Dashboard page, initialize user dashboard UI
+      if(typeof window.initUserDashboard === 'function'){
+        window.initUserDashboard(data);
+      }
+    }
+  })
+  .catch(function(){});
 });})();

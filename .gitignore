@@ -47,6 +47,7 @@ logs/
 # User upload archives
 files/
 files*/
+test.py
 
 # Alembic
 migrations/versions/*.py
