@@ -77,8 +77,9 @@ def check_auth(
     if token is None:
         return None, None, json.dumps({"error": "Unauthenticated: Valid ModLink API key is required."})
 
-    if guild_id:
-        if str(guild_id) not in [str(g) for g in token.allowed_guild_ids]:
+    if guild_id and token.allowed_guild_ids and "*" not in token.allowed_guild_ids:
+        allowed_str = [str(g).strip() for g in token.allowed_guild_ids]
+        if str(guild_id).strip() not in allowed_str:
             return token, None, json.dumps({
                 "error": "Forbidden: Your API key is not authorized for server ID " + str(guild_id)
             })

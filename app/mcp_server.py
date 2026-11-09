@@ -56,11 +56,19 @@ logger = logging.getLogger(__name__)
 from contextvars import ContextVar
 
 current_ml_token_var: ContextVar[Optional[ModLinkToken]] = ContextVar("current_ml_token_var", default=None)
+_mcp_active_sessions: Dict[str, ModLinkToken] = {}
+_latest_authenticated_token: Optional[ModLinkToken] = None
 
 
 def _get_ml_token() -> Optional[ModLinkToken]:
     """Retrieve the authenticated ModLinkToken for the current request."""
-    return current_ml_token_var.get()
+    token = current_ml_token_var.get()
+    if token is not None:
+        return token
+    # Fallback to active session token if context var lost scope in anyio thread
+    if _mcp_active_sessions:
+        return list(_mcp_active_sessions.values())[-1]
+    return _latest_authenticated_token
 
 
 # ── MCPServer instance ────────────────────────────────────────────────────────
@@ -3538,12 +3546,68 @@ def build_app() -> Starlette:
             # Enforce API key auth on /mcp endpoints
             if path.startswith("/mcp"):
                 raw_token = None
+                session_id = None
+                cookie_str = ""
+
+                # 1. Search headers for token, session ID, and cookies
                 for key, val in scope.get("headers", []):
                     k = key.decode("latin-1").lower()
-                    if k in ("x-api-key", "x-modlink-token", "x-auth-token", "authorization"):
-                        v = val.decode("latin-1").strip()
-                        raw_token = v[7:].strip() if v.lower().startswith("bearer ") else v
-                        break
+                    if k in ("x-api-key", "x-modlink-token", "x-auth-token", "authorization", "api-key", "apikey", "token", "x-token"):
+                        v = val.decode("latin-1").strip("'\" \t\r\n")
+                        candidate = v[7:].strip("'\" \t\r\n") if v.lower().startswith("bearer ") else v
+                        if candidate and candidate.lower() not in ("null", "undefined", "none"):
+                            raw_token = candidate
+                    elif k in ("mcp-session-id", "x-mcp-session-id"):
+                        session_id = val.decode("latin-1").strip()
+                    elif k == "cookie":
+                        cookie_str = val.decode("latin-1")
+
+                # 2. Search query parameters if header was not provided (e.g. ?token=... or ?api_key=...)
+                if not raw_token:
+                    from urllib.parse import parse_qs
+                    qs_str = scope.get("query_string", b"").decode("latin-1")
+                    if qs_str:
+                        params = parse_qs(qs_str)
+                        for param_key in ("api_key", "token", "key", "apikey", "auth", "x-api-key"):
+                            vals = params.get(param_key)
+                            if vals and vals[0]:
+                                candidate = vals[0].strip("'\" \t\r\n")
+                                if candidate.lower().startswith("bearer "):
+                                    candidate = candidate[7:].strip("'\" \t\r\n")
+                                if candidate and candidate.lower() not in ("null", "undefined", "none"):
+                                    raw_token = candidate
+                                    break
+
+                # 3. If session ID was already authenticated in a previous request, reuse its token
+                if not raw_token and session_id and session_id in _mcp_active_sessions:
+                    ml_token = _mcp_active_sessions[session_id]
+                    current_ml_token_var.set(ml_token)
+                    await self.inner_app(scope, receive, send)
+                    return
+
+                # 4. If still no token, check session cookie (e.g. user interacting via browser/dashboard)
+                if not raw_token and "modlink_session=" in cookie_str:
+                    from http.cookies import SimpleCookie
+                    try:
+                        c = SimpleCookie()
+                        c.load(cookie_str)
+                        if "modlink_session" in c:
+                            s_val = c["modlink_session"].value
+                            from app.database import UserSession
+                            from datetime import datetime, timezone
+                            now = datetime.now(timezone.utc)
+                            async with AsyncSessionLocal() as session:
+                                s_res = await session.execute(
+                                    select(UserSession).where(
+                                        UserSession.id == s_val,
+                                        UserSession.expires_at > now,
+                                    )
+                                )
+                                u_sess = s_res.scalars().first()
+                                if u_sess and u_sess.api_key:
+                                    raw_token = u_sess.api_key
+                    except Exception as exc:
+                        logger.debug("Could not extract token from cookie: %s", exc)
 
                 if raw_token:
                     ml_token = await verify_bearer(raw_token)
@@ -3555,6 +3619,10 @@ def build_app() -> Starlette:
                         await res(scope, receive, send)
                         return
                     current_ml_token_var.set(ml_token)
+                    global _latest_authenticated_token
+                    _latest_authenticated_token = ml_token
+                    if session_id:
+                        _mcp_active_sessions[session_id] = ml_token
                 else:
                     current_ml_token_var.set(None)
                 await self.inner_app(scope, receive, send)

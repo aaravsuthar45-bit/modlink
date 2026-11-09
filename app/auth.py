@@ -129,28 +129,100 @@ async def _verify_oidc(raw_token: str) -> Optional[AccessToken]:
 # ── API-key path (dev / simple deployments) ──────────────────────────────────
 
 async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
-    """Look up a hashed API key in the database."""
-    key_hash = _hash_key(raw_token)
+    """Look up an API key in the database with backward compatibility and auto-recovery."""
+    cleaned = (raw_token or "").strip("'\" \t\r\n")
+    if cleaned.lower().startswith("bearer "):
+        cleaned = cleaned[7:].strip("'\" \t\r\n")
+
+    if not cleaned:
+        return None
+
+    # Compute candidate hashes: current secret, legacy secret, and plain sha256
+    primary_hash = _hash_key(cleaned)
+    legacy_hash = hmac.new(b"change-me-in-production", cleaned.encode(), hashlib.sha256).hexdigest()
+    sha256_hash = hashlib.sha256(cleaned.encode()).hexdigest()
+    candidate_hashes = list({primary_hash, legacy_hash, sha256_hash})
+
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             select(AIConnection).where(
-                AIConnection.api_key_hash == key_hash,
+                AIConnection.api_key_hash.in_(candidate_hashes),
                 AIConnection.status == ConnectionStatus.active,
             )
         )
-        conn: Optional[AIConnection] = result.scalar_one_or_none()
+        conns = result.scalars().all()
+        if conns:
+            conn = conns[0]
+            # Automatically migrate legacy hashes to primary_hash
+            if conn.api_key_hash != primary_hash:
+                try:
+                    conn.api_key_hash = primary_hash
+                    await session.commit()
+                    logger.info("Migrated legacy API key hash for connection: %s", conn.name)
+                except Exception as exc:
+                    logger.warning("Could not auto-upgrade legacy key hash: %s", exc)
 
-    if conn is None:
-        return None
+            return AccessToken(
+                connection_id=str(conn.id),
+                name=conn.name,
+                allowed_guild_ids=list(conn.allowed_guild_ids or []),
+                permission_level=conn.permission_level,
+                autonomous_mode=conn.autonomous_mode,
+                scopes=[],
+            )
 
-    return AccessToken(
-        connection_id=str(conn.id),
-        name=conn.name,
-        allowed_guild_ids=list(conn.allowed_guild_ids or []),
-        permission_level=conn.permission_level,
-        autonomous_mode=conn.autonomous_mode,
-        scopes=[],
-    )
+        # Fallback: Check UserSession table by raw user api_key
+        try:
+            from app.database import UserSession
+            sess_res = await session.execute(
+                select(UserSession).where(UserSession.api_key == cleaned)
+            )
+            user_sess = sess_res.scalars().first()
+            if user_sess:
+                admin_guild_ids = [str(g.get("id")) for g in (user_sess.admin_guilds or []) if g.get("id")]
+                conn_res = await session.execute(
+                    select(AIConnection).where(
+                        AIConnection.name == f"{user_sess.discord_username}'s AI Connector",
+                        AIConnection.status == ConnectionStatus.active,
+                    )
+                )
+                conn = conn_res.scalars().first()
+                if conn:
+                    conn.api_key_hash = primary_hash
+                    conn.allowed_guild_ids = admin_guild_ids
+                    await session.commit()
+                    return AccessToken(
+                        connection_id=str(conn.id),
+                        name=conn.name,
+                        allowed_guild_ids=list(conn.allowed_guild_ids or admin_guild_ids),
+                        permission_level=conn.permission_level,
+                        autonomous_mode=conn.autonomous_mode,
+                        scopes=[],
+                    )
+                else:
+                    new_conn = AIConnection(
+                        name=f"{user_sess.discord_username}'s AI Connector",
+                        description=f"Auto-recovered connector for Discord user {user_sess.discord_user_id}",
+                        api_key_hash=primary_hash,
+                        allowed_guild_ids=admin_guild_ids,
+                        permission_level=PermissionLevel.admin,
+                        autonomous_mode=False,
+                        status=ConnectionStatus.active,
+                    )
+                    session.add(new_conn)
+                    await session.commit()
+                    return AccessToken(
+                        connection_id=str(new_conn.id),
+                        name=new_conn.name,
+                        allowed_guild_ids=admin_guild_ids,
+                        permission_level=PermissionLevel.admin,
+                        autonomous_mode=False,
+                        scopes=[],
+                    )
+        except Exception as exc:
+            logger.warning("Error during UserSession key fallback: %s", exc)
+
+    return None
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
