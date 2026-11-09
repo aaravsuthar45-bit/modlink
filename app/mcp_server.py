@@ -1819,13 +1819,21 @@ async def get_bot_status() -> str:
     if token is None:
         return json.dumps({"error": "Unauthenticated"})
     try:
+        # SECURITY: Only expose guilds this API key is authorized for.
+        # Never leak other servers the bot is in globally.
+        allowed_ids = set(token.allowed_guild_ids or [])
+        if allowed_ids:
+            visible_guilds = [g for g in bot.guilds if str(g.id) in allowed_ids]
+        else:
+            visible_guilds = []  # No access if no guilds are explicitly allowed
+
         data = {
             "bot_user": str(bot.user) if bot.user else "Not logged in",
             "bot_id": str(bot.user.id) if bot.user else None,
             "is_ready": bot.is_ready(),
             "latency_ms": round(bot.latency * 1000, 2),
-            "guild_count": len(bot.guilds),
-            "guilds": [{"guild_id": str(g.id), "name": g.name} for g in bot.guilds],
+            "guild_count": len(visible_guilds),
+            "guilds": [{"guild_id": str(g.id), "name": g.name} for g in visible_guilds],
         }
         await _audit(connection_id=token.connection_id, guild_id="n/a",
                      tool_name="get_bot_status", arguments={}, result=AuditResult.success)
@@ -3381,17 +3389,20 @@ def build_app() -> Starlette:
     DEFAULT_API_TOKEN = "3f8hb2HxQ3_YVrvJ98gDtlr2ohfhF8sm8Xoy5DNW9-76p0IAQc__Pxm1ImM93Qdq"
 
     async def health(request: Request) -> JSONResponse:
+        # SECURITY: Don't expose total guild count — it leaks info about other users' servers
         return JSONResponse({
             "status": "ok",
             "service": "modlink-mcp",
             "version": "1.0.0",
             "discord_connected": bot.is_ready(),
-            "guilds": len(bot.guilds),
         })
 
     def _get_public_base(request: Request) -> str:
         if settings.mcp_public_url and "yourdomain.com" not in settings.mcp_public_url:
-            return settings.mcp_public_url.rstrip("/mcp")
+            url = settings.mcp_public_url
+            if url.endswith("/mcp"):
+                return url[:-4]
+            return url.rstrip("/")
         # Use Host header from reverse proxy (e.g. ngrok)
         host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "localhost:8000"
         proto = request.headers.get("x-forwarded-proto") or ("https" if "render" in host or "ngrok" in host else "http")
