@@ -3458,56 +3458,150 @@ def build_app() -> Starlette:
         })
 
     async def oauth_register(request: Request) -> JSONResponse:
-        """
-        Dynamic Client Registration stub.
-        Returns a client_id so MCP clients can proceed, but no real client
-        is stored — authentication always requires a real API key via the
-        /auth/discord/login portal flow.
-        """
+        """Dynamic Client Registration (RFC 7591)."""
         try:
             data = await request.json()
         except Exception:
             data = {}
-        client_id = f"modlink-{secrets.token_urlsafe(8)}"
-        return JSONResponse({
-            "client_id": client_id,
-            "client_id_issued_at": int(time.time()),
-            "client_secret_expires_at": 0,
-            "redirect_uris": data.get("redirect_uris", []),
-            "grant_types": ["authorization_code"],
-            "response_types": ["code"],
-            "client_name": data.get("client_name", "MCP Client"),
-            "token_endpoint_auth_method": "none",
-        }, status_code=201)
+        from app.oauth import register_client
+        client_info = register_client(data)
+        return JSONResponse(client_info, status_code=201)
 
     async def oauth_authorize(request: Request) -> RedirectResponse:
         """
-        Authorization endpoint — redirect the user to ModLink's real Discord OAuth
-        login flow instead of issuing a fake code.
+        OAuth 2.0 Authorization Endpoint (RFC 6749 + RFC 7636).
+        Authenticates the user via Discord, then returns an authorization_code to Claude/Cursor.
         """
         params = request.query_params
         redirect_uri = params.get("redirect_uri", "")
         state = params.get("state", "")
-        # Forward to the real Discord login; after login, the user gets a proper API key.
+        client_id = params.get("client_id", "")
+        code_challenge = params.get("code_challenge", "")
+        code_challenge_method = params.get("code_challenge_method", "S256")
+
+        if not redirect_uri:
+            return RedirectResponse("/?error=missing_redirect_uri", status_code=302)
+
+        # 1. Check if user already has an active ModLink Discord session
+        session_token = request.cookies.get("modlink_session")
+        if session_token:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            async with AsyncSessionLocal() as session:
+                from app.database import UserSession
+                res = await session.execute(
+                    select(UserSession).where(
+                        UserSession.id == session_token,
+                        UserSession.expires_at > now,
+                    )
+                )
+                user_sess = res.scalars().first()
+                if user_sess and user_sess.api_key:
+                    from app.oauth import issue_authorization_code
+                    auth_code = issue_authorization_code(
+                        client_id=client_id,
+                        redirect_uri=redirect_uri,
+                        api_key=user_sess.api_key,
+                        discord_user_id=user_sess.discord_user_id,
+                        discord_username=user_sess.discord_username,
+                        code_challenge=code_challenge,
+                        code_challenge_method=code_challenge_method,
+                    )
+                    from urllib.parse import urlencode as _qenc
+                    sep = "&" if "?" in redirect_uri else "?"
+                    cb_data = {"code": auth_code}
+                    if state:
+                        cb_data["state"] = state
+                    logger.info("Instantly authorized active user %s for MCP client", user_sess.discord_username)
+                    return RedirectResponse(f"{redirect_uri}{sep}{_qenc(cb_data)}", status_code=302)
+
+        # 2. User is not yet logged in: store the MCP OAuth request in a cookie and redirect to Discord login
         from app.portal import _get_public_base
         base = _get_public_base(request)
-        sep = "&" if "?" in redirect_uri else "?"
-        # Redirect to our real Discord OAuth with the original redirect_uri as next-hop
-        from urllib.parse import urlencode as _enc
-        return RedirectResponse(
-            f"{base}/auth/discord/login?" + _enc({"next": redirect_uri, "state": state}),
-            status_code=302,
+        flow_data = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": code_challenge_method,
+        }
+        encoded_flow = base64.urlsafe_b64encode(json.dumps(flow_data).encode("utf-8")).decode("ascii")
+
+        response = RedirectResponse(f"{base}/auth/discord/login", status_code=302)
+        response.set_cookie(
+            "mcp_oauth_flow",
+            encoded_flow,
+            httponly=True,
+            samesite="lax",
+            secure=base.startswith("https"),
+            path="/",
+            max_age=600,
         )
+        return response
 
     async def oauth_token(request: Request) -> JSONResponse:
         """
-        Token endpoint — no code is valid here; users must use the portal login flow
-        to receive a real API key. Return an explicit error.
+        OAuth 2.0 Token Endpoint (RFC 6749 + RFC 7636).
+        Exchanges authorization_code for a Bearer AccessToken containing the user's real API key.
         """
-        return JSONResponse(
-            {"error": "invalid_grant", "error_description": "Use the ModLink portal login to obtain an API key."},
-            status_code=400,
+        content_type = request.headers.get("content-type", "")
+        params = {}
+        if "application/json" in content_type:
+            try:
+                params = await request.json()
+            except Exception:
+                params = {}
+        else:
+            try:
+                form = await request.form()
+                params = dict(form)
+            except Exception:
+                params = {}
+
+        grant_type = params.get("grant_type")
+        code = params.get("code")
+        redirect_uri = params.get("redirect_uri")
+        code_verifier = params.get("code_verifier")
+        client_id = params.get("client_id")
+
+        if grant_type != "authorization_code":
+            return JSONResponse(
+                {"error": "unsupported_grant_type", "error_description": "Only authorization_code grant is supported."},
+                status_code=400,
+            )
+
+        if not code:
+            return JSONResponse(
+                {"error": "invalid_request", "error_description": "Missing code parameter."},
+                status_code=400,
+            )
+
+        from app.oauth import consume_authorization_code
+        record, err_msg = consume_authorization_code(
+            code=code,
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            code_verifier=code_verifier,
         )
+
+        if err_msg or not record:
+            return JSONResponse(
+                {"error": "invalid_grant", "error_description": err_msg or "Invalid authorization code."},
+                status_code=400,
+            )
+
+        api_key = record["api_key"]
+        logger.info("Successfully issued AccessToken for Discord user %s", record.get("discord_username"))
+        return JSONResponse({
+            "access_token": api_key,
+            "token_type": "Bearer",
+            "expires_in": 30 * 86400,
+            "scope": "modlink:access modlink:admin",
+            "user": {
+                "id": record.get("discord_user_id"),
+                "username": record.get("discord_username"),
+            },
+        })
 
     from contextlib import asynccontextmanager
 

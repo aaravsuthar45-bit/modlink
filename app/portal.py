@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 import base64
+import json
 import hmac
 import logging
 from pathlib import Path
@@ -410,9 +411,38 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         session.add(user_sess)
         await session.commit()
 
-    # 9. Set persistent session cookie and redirect directly to /dashboard
+    # 9. Determine target redirect (MCP Client callback e.g. Claude / Cursor, or Dashboard)
+    target_redirect = "/dashboard"
+    mcp_flow_cookie = request.cookies.get("mcp_oauth_flow")
+    if mcp_flow_cookie:
+        try:
+            flow_json = base64.urlsafe_b64decode(mcp_flow_cookie.encode("ascii")).decode("utf-8")
+            flow_data = json.loads(flow_json)
+            client_redirect_uri = flow_data.get("redirect_uri")
+            if client_redirect_uri:
+                from app.oauth import issue_authorization_code
+                auth_code = issue_authorization_code(
+                    client_id=flow_data.get("client_id"),
+                    redirect_uri=client_redirect_uri,
+                    api_key=raw_api_key,
+                    discord_user_id=discord_user_id,
+                    discord_username=discord_username,
+                    code_challenge=flow_data.get("code_challenge"),
+                    code_challenge_method=flow_data.get("code_challenge_method"),
+                )
+                from urllib.parse import urlencode as _qenc
+                sep = "&" if "?" in client_redirect_uri else "?"
+                cb_data = {"code": auth_code}
+                if flow_data.get("state"):
+                    cb_data["state"] = flow_data["state"]
+                target_redirect = f"{client_redirect_uri}{sep}{_qenc(cb_data)}"
+                logger.info("Redirecting back to MCP client at %s", client_redirect_uri)
+        except Exception as exc:
+            logger.warning("Could not process mcp_oauth_flow cookie: %s", exc)
+
+    # 10. Set persistent session cookie and redirect
     is_https = redirect_uri.startswith("https://")
-    response = RedirectResponse("/dashboard", status_code=302)
+    response = RedirectResponse(target_redirect, status_code=302)
     response.set_cookie(
         key="modlink_session",
         value=session_token,
@@ -422,8 +452,9 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         secure=is_https,     # Secure flag whenever served over HTTPS
         path="/",
     )
-    # Clear the one-time oauth_state cookie so it can't be replayed
+    # Clear one-time flow cookies
     response.delete_cookie("oauth_state", path="/")
+    response.delete_cookie("mcp_oauth_flow", path="/")
     return response
 
 
