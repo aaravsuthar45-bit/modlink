@@ -3394,8 +3394,11 @@ def build_app() -> Starlette:
             return settings.mcp_public_url.rstrip("/mcp")
         # Use Host header from reverse proxy (e.g. ngrok)
         host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "localhost:8000"
-        proto = request.headers.get("x-forwarded-proto") or "https" if "ngrok" in host else "http"
-        return f"{proto}://{host}"
+        proto = request.headers.get("x-forwarded-proto") or ("https" if "render" in host or "ngrok" in host else "http")
+        base = f"{proto}://{host}"
+        if ".onrender.co" in base:
+            base = base.replace(".onrender.co", ".onrender.com")
+        return base.rstrip("/")
 
     async def well_known(request: Request) -> JSONResponse:
         """MCP discovery document."""
