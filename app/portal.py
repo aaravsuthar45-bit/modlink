@@ -47,7 +47,12 @@ def _clean_url(url: str) -> str:
 def _get_public_base(request: Request) -> str:
     """Return the base URL of this server (handling ngrok / Render proxies)."""
     if settings.mcp_public_url and "yourdomain.com" not in settings.mcp_public_url and "localhost" not in settings.mcp_public_url:
-        base = settings.mcp_public_url.rstrip("/mcp")
+        url = settings.mcp_public_url
+        # Use removesuffix (Python 3.9+) logic — avoids rstrip() which strips chars, not substrings
+        if url.endswith("/mcp"):
+            base = url[:-4]
+        else:
+            base = url.rstrip("/")
     else:
         host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "localhost:8000"
         proto = request.headers.get("x-forwarded-proto") or ("https" if "render" in host or "ngrok" in host else "http")
