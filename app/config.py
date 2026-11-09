@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     )
 
     # ── Discord ──────────────────────────────────────────────
-    discord_token: str = Field(..., description="Discord bot token")
+    discord_token: str = Field("", description="Discord bot token")
     discord_client_id: Optional[str] = Field(None, description="Discord Application / Client ID for OAuth2")
     discord_client_secret: Optional[str] = Field(None, description="Discord OAuth2 Client Secret")
     discord_redirect_uri: Optional[str] = Field(None, description="OAuth2 callback URL, e.g. https://your-domain.onrender.com/auth/discord/callback")
