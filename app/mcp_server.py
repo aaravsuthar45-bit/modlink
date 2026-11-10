@@ -32,7 +32,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from app.auth import AccessToken as ModLinkToken, has_permission, verify_bearer
+from app.auth import (
+    AccessToken as ModLinkToken,
+    has_permission,
+    verify_bearer,
+    get_current_token,
+    set_current_token,
+    register_session_token,
+)
 from app.config import settings
 from app.custom_tools import get_custom_tool, get_custom_tools
 from app.database import (
@@ -45,7 +52,7 @@ from app.database import (
     PendingApproval,
     init_db,
 )
-from app.discord_bot import bot, get_channel, get_guild, get_member, start_bot
+from app.discord_bot import bot, get_channel, get_any_channel, get_guild, get_member, get_role, start_bot
 from sqlalchemy import select, update
 
 logger = logging.getLogger(__name__)
@@ -53,22 +60,9 @@ logger = logging.getLogger(__name__)
 
 # ── Request authentication context ───────────────────────────────────────────
 
-from contextvars import ContextVar
-
-current_ml_token_var: ContextVar[Optional[ModLinkToken]] = ContextVar("current_ml_token_var", default=None)
-_mcp_active_sessions: Dict[str, ModLinkToken] = {}
-_latest_authenticated_token: Optional[ModLinkToken] = None
-
-
 def _get_ml_token() -> Optional[ModLinkToken]:
-    """Retrieve the authenticated ModLinkToken for the current request."""
-    token = current_ml_token_var.get()
-    if token is not None:
-        return token
-    # Fallback to active session token if context var lost scope in anyio thread
-    if _mcp_active_sessions:
-        return list(_mcp_active_sessions.values())[-1]
-    return _latest_authenticated_token
+    """Retrieve the authenticated ModLinkToken for the current request from unified auth context."""
+    return get_current_token()
 
 
 # ── MCPServer instance ────────────────────────────────────────────────────────
@@ -119,7 +113,10 @@ async def _audit(
 # ── Permission helpers ────────────────────────────────────────────────────────
 
 def _require_guild_access(token: ModLinkToken, guild_id: str) -> None:
-    if guild_id not in token.allowed_guild_ids:
+    if not token.allowed_guild_ids or "*" in token.allowed_guild_ids:
+        return
+    allowed_str = [str(g).strip() for g in token.allowed_guild_ids]
+    if str(guild_id).strip() not in allowed_str:
         raise PermissionError(
             f"Your connection is not authorized for guild {guild_id!r}."
         )
@@ -1176,13 +1173,83 @@ async def create_role(
 
 
 @mcp.tool(
+    name="check_role_hierarchy",
+    description="Preflight check comparing the bot's highest role against a target role. Explains if the bot can edit/delete/assign it, with actionable hints. [Requires: read]",
+)
+async def check_role_hierarchy(guild_id: str, role_id: str) -> str:
+    token = _get_ml_token()
+    if token is None:
+        return json.dumps({
+            "status": "error", "error": "unauthenticated",
+            "code": "missing_or_invalid_api_key",
+            "message": "Valid ModLink API key is required.",
+            "hint": "Set Authorization: Bearer <key> in headers.",
+        }, indent=2)
+    try:
+        _require_guild_access(token, guild_id)
+        _require_permission(token, PermissionLevel.read)
+        guild = await get_guild(guild_id)
+        role = guild.get_role(int(role_id))
+        if role is None:
+            return json.dumps({
+                "status": "error", "error": "not_found", "code": "role_not_found",
+                "message": f"Role ID '{role_id}' was not found in guild '{guild.name}'.",
+                "hint": "Use list_roles to retrieve active role IDs.",
+            }, indent=2)
+
+        bot_member = guild.me or guild.get_member(bot.user.id)
+        bot_top = bot_member.top_role if bot_member else None
+        is_owner = guild.owner_id == bot.user.id
+
+        if role.managed:
+            return json.dumps({
+                "status": "ok", "can_manage": False, "reason": "managed_role",
+                "role_name": role.name, "role_position": role.position,
+                "bot_top_role": bot_top.name if bot_top else None,
+                "bot_top_role_position": bot_top.position if bot_top else 0,
+                "explanation": f"Role '{role.name}' is managed by an external integration and cannot be edited by bots.",
+                "hint": "Managed roles cannot be manually edited or assigned.",
+            }, indent=2)
+
+        can_manage = is_owner or (bot_top is not None and bot_top.position > role.position)
+        if not can_manage:
+            return json.dumps({
+                "status": "ok", "can_manage": False, "reason": "bot_role_too_low",
+                "role_name": role.name, "role_position": role.position,
+                "bot_top_role": bot_top.name if bot_top else None,
+                "bot_top_role_position": bot_top.position if bot_top else 0,
+                "hierarchy_difference": (bot_top.position - role.position) if bot_top else -999,
+                "explanation": f"Bot's top role '{bot_top.name if bot_top else 'None'}' (position {bot_top.position if bot_top else 0}) is not higher than target role '{role.name}' (position {role.position}).",
+                "hint": f"In Discord Server Settings > Roles, drag the bot's role '{bot_top.name if bot_top else 'ModLink'}' above '{role.name}'.",
+            }, indent=2)
+
+        return json.dumps({
+            "status": "ok", "can_manage": True, "reason": "ok",
+            "role_name": role.name, "role_position": role.position,
+            "bot_top_role": bot_top.name if bot_top else None,
+            "bot_top_role_position": bot_top.position if bot_top else 0,
+            "hierarchy_difference": (bot_top.position - role.position) if bot_top else 0,
+            "explanation": f"Bot has hierarchy clearance to manage role '{role.name}'.",
+            "hint": "Role is safe to edit, delete, or assign.",
+        }, indent=2)
+    except Exception as exc:
+        from app.modules.common import format_discord_error
+        return format_discord_error(exc, action_context=f"checking hierarchy for role {role_id}")
+
+
+@mcp.tool(
     name="delete_role",
-    description="Delete a role from the guild by role ID.",
+    description="Delete a role from the guild by role ID. [Requires: manage]",
 )
 async def delete_role(guild_id: str, role_id: str, reason: str = "Role deleted via ModLink MCP") -> str:
     token = _get_ml_token()
     if token is None:
-        return json.dumps({"error": "Unauthenticated"})
+        return json.dumps({
+            "status": "error", "error": "unauthenticated",
+            "code": "missing_or_invalid_api_key",
+            "message": "Valid ModLink API key is required.",
+            "hint": "Set Authorization: Bearer <key> in headers.",
+        }, indent=2)
     args = {"guild_id": guild_id, "role_id": role_id}
     try:
         _require_guild_access(token, guild_id)
@@ -1190,25 +1257,40 @@ async def delete_role(guild_id: str, role_id: str, reason: str = "Role deleted v
         guild = await get_guild(guild_id)
         role = guild.get_role(int(role_id))
         if role is None:
-            raise ValueError(f"Role {role_id!r} not found.")
+            return json.dumps({
+                "status": "error", "error": "not_found", "code": "role_not_found",
+                "message": f"Role {role_id!r} not found.",
+                "hint": "Check list_roles for valid IDs.",
+            }, indent=2)
+
+        bot_member = guild.me or guild.get_member(bot.user.id)
+        if bot_member and bot_member.top_role.position <= role.position and guild.owner_id != bot.user.id:
+            from app.modules.common import make_error
+            return make_error(
+                code="bot_role_too_low",
+                message=f"Cannot delete role '{role.name}' (position {role.position}): The bot's top role '{bot_member.top_role.name}' (position {bot_member.top_role.position}) is lower or equal.",
+                hint=f"In Discord Server Settings > Roles, drag the bot's role '{bot_member.top_role.name}' above '{role.name}'.",
+            )
+
         role_name = role.name
         await role.delete(reason=reason)
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_role", arguments=args, result=AuditResult.success)
-        return json.dumps({"status": "deleted", "role_id": role_id, "name": role_name})
+        return json.dumps({"status": "deleted", "role_id": role_id, "name": role_name}, indent=2)
     except PermissionError as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_role", arguments=args, result=AuditResult.denied, result_detail=str(exc))
-        return json.dumps({"error": "Permission denied", "detail": str(exc)})
+        return json.dumps({"status": "error", "error": "insufficient_permission", "code": "insufficient_permission", "message": str(exc), "hint": "Upgrade connection permission level to manage or admin."}, indent=2)
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_role", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        from app.modules.common import format_discord_error
+        return format_discord_error(exc, action_context=f"deleting role {role_id}")
 
 
 @mcp.tool(
     name="edit_role",
-    description="Edit a role's name, color, hoist, and mentionable settings. Pass only the fields you want to change.",
+    description="Edit a role's name, color, hoist, and mentionable settings. Pass only the fields you want to change. [Requires: manage]",
 )
 async def edit_role(
     guild_id: str,
@@ -1221,7 +1303,12 @@ async def edit_role(
 ) -> str:
     token = _get_ml_token()
     if token is None:
-        return json.dumps({"error": "Unauthenticated"})
+        return json.dumps({
+            "status": "error", "error": "unauthenticated",
+            "code": "missing_or_invalid_api_key",
+            "message": "Valid ModLink API key is required.",
+            "hint": "Set Authorization: Bearer <key> in headers.",
+        }, indent=2)
     args = {"guild_id": guild_id, "role_id": role_id, "name": name, "color": color}
     try:
         _require_guild_access(token, guild_id)
@@ -1229,7 +1316,21 @@ async def edit_role(
         guild = await get_guild(guild_id)
         role = guild.get_role(int(role_id))
         if role is None:
-            raise ValueError(f"Role {role_id!r} not found.")
+            return json.dumps({
+                "status": "error", "error": "not_found", "code": "role_not_found",
+                "message": f"Role {role_id!r} not found.",
+                "hint": "Check list_roles for valid IDs.",
+            }, indent=2)
+
+        bot_member = guild.me or guild.get_member(bot.user.id)
+        if bot_member and bot_member.top_role.position <= role.position and guild.owner_id != bot.user.id:
+            from app.modules.common import make_error
+            return make_error(
+                code="bot_role_too_low",
+                message=f"Cannot edit role '{role.name}' (position {role.position}): The bot's top role '{bot_member.top_role.name}' (position {bot_member.top_role.position}) is lower or equal.",
+                hint=f"In Discord Server Settings > Roles, drag the bot's role '{bot_member.top_role.name}' above '{role.name}'.",
+            )
+
         kwargs: dict = {}
         if name is not None:
             kwargs["name"] = name
@@ -1242,15 +1343,16 @@ async def edit_role(
         await role.edit(reason=reason, **kwargs)
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_role", arguments=args, result=AuditResult.success)
-        return json.dumps({"status": "updated", "role_id": role_id, "name": role.name, "color": str(role.color)})
+        return json.dumps({"status": "updated", "role_id": role_id, "name": role.name, "color": str(role.color)}, indent=2)
     except PermissionError as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_role", arguments=args, result=AuditResult.denied, result_detail=str(exc))
-        return json.dumps({"error": "Permission denied", "detail": str(exc)})
+        return json.dumps({"status": "error", "error": "insufficient_permission", "code": "insufficient_permission", "message": str(exc), "hint": "Upgrade connection permission level to manage or admin."}, indent=2)
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_role", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        from app.modules.common import format_discord_error
+        return format_discord_error(exc, action_context=f"editing role {role_id}")
 
 
 @mcp.tool(
@@ -1394,7 +1496,7 @@ async def delete_channel(guild_id: str, channel_id: str, reason: str = "Channel 
 
 @mcp.tool(
     name="edit_channel",
-    description="Edit a text channel's name, topic, slowmode, or NSFW flag. Pass only fields you want to change.",
+    description="Edit a channel's properties (supports text, voice, stage, and forum channels). [Requires: manage]",
 )
 async def edit_channel(
     guild_id: str,
@@ -1403,37 +1505,64 @@ async def edit_channel(
     topic: Optional[str] = None,
     slowmode_delay: Optional[int] = None,
     nsfw: Optional[bool] = None,
+    user_limit: Optional[int] = None,
+    bitrate: Optional[int] = None,
+    category_id: Optional[str] = None,
     reason: str = "Channel edited via ModLink MCP",
 ) -> str:
     token = _get_ml_token()
     if token is None:
-        return json.dumps({"error": "Unauthenticated"})
+        return json.dumps({
+            "status": "error", "error": "unauthenticated",
+            "code": "missing_or_invalid_api_key",
+            "message": "Valid ModLink API key is required.",
+            "hint": "Set Authorization: Bearer <key> in headers.",
+        }, indent=2)
     args = {"guild_id": guild_id, "channel_id": channel_id, "name": name, "topic": topic}
     try:
         _require_guild_access(token, guild_id)
         _require_permission(token, PermissionLevel.manage)
-        channel = await get_channel(guild_id, channel_id)
+        channel = await get_any_channel(guild_id, channel_id)
         kwargs: dict = {}
         if name is not None:
             kwargs["name"] = name
-        if topic is not None:
+        if topic is not None and hasattr(channel, "topic"):
             kwargs["topic"] = topic
-        if slowmode_delay is not None:
+        if slowmode_delay is not None and hasattr(channel, "slowmode_delay"):
             kwargs["slowmode_delay"] = max(0, min(slowmode_delay, 21600))
-        if nsfw is not None:
+        if nsfw is not None and hasattr(channel, "nsfw"):
             kwargs["nsfw"] = nsfw
+        if user_limit is not None and hasattr(channel, "user_limit"):
+            kwargs["user_limit"] = max(0, min(user_limit, 99))
+        if bitrate is not None and hasattr(channel, "bitrate"):
+            kwargs["bitrate"] = max(8000, min(bitrate, 384000))
+        if category_id is not None:
+            if category_id.lower() in ("none", "null", "0", ""):
+                kwargs["category"] = None
+            else:
+                guild = await get_guild(guild_id)
+                cat = guild.get_channel(int(category_id))
+                if isinstance(cat, discord.CategoryChannel):
+                    kwargs["category"] = cat
+
         await channel.edit(reason=reason, **kwargs)
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_channel", arguments=args, result=AuditResult.success)
-        return json.dumps({"status": "updated", "channel_id": channel_id, "name": channel.name})
+        return json.dumps({
+            "status": "updated",
+            "channel_id": channel_id,
+            "name": channel.name,
+            "type": str(channel.type),
+        }, indent=2)
     except PermissionError as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_channel", arguments=args, result=AuditResult.denied, result_detail=str(exc))
-        return json.dumps({"error": "Permission denied", "detail": str(exc)})
+        return json.dumps({"status": "error", "error": "insufficient_permission", "code": "insufficient_permission", "message": str(exc), "hint": "Upgrade connection permission level to manage or admin."}, indent=2)
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        from app.modules.common import format_discord_error
+        return format_discord_error(exc, action_context=f"editing channel {channel_id}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3728,11 +3857,16 @@ def build_app() -> Starlette:
                         cookie_str = val.decode("latin-1")
 
                 # 2. Search query parameters if header was not provided (e.g. ?token=... or ?api_key=...)
-                if not raw_token:
-                    from urllib.parse import parse_qs
-                    qs_str = scope.get("query_string", b"").decode("latin-1")
-                    if qs_str:
-                        params = parse_qs(qs_str)
+                from urllib.parse import parse_qs
+                qs_str = scope.get("query_string", b"").decode("latin-1")
+                if qs_str:
+                    params = parse_qs(qs_str)
+                    if not session_id:
+                        for s_key in ("sessionId", "session_id", "mcp-session-id", "mcp_session_id"):
+                            if s_key in params and params[s_key]:
+                                session_id = params[s_key][0].strip()
+                                break
+                    if not raw_token:
                         for param_key in ("api_key", "token", "key", "apikey", "auth", "x-api-key"):
                             vals = params.get(param_key)
                             if vals and vals[0]:
@@ -3744,11 +3878,13 @@ def build_app() -> Starlette:
                                     break
 
                 # 3. If session ID was already authenticated in a previous request, reuse its token
-                if not raw_token and session_id and session_id in _mcp_active_sessions:
-                    ml_token = _mcp_active_sessions[session_id]
-                    current_ml_token_var.set(ml_token)
-                    await self.inner_app(scope, receive, send)
-                    return
+                if not raw_token and session_id:
+                    from app.auth import _active_sessions
+                    if session_id in _active_sessions:
+                        ml_token = _active_sessions[session_id]
+                        set_current_token(ml_token, session_id=session_id)
+                        await self.inner_app(scope, receive, send)
+                        return
 
                 # 4. If still no token, check session cookie (e.g. user interacting via browser/dashboard)
                 if not raw_token and "modlink_session=" in cookie_str:
@@ -3778,19 +3914,31 @@ def build_app() -> Starlette:
                     ml_token = await verify_bearer(raw_token)
                     if not ml_token:
                         res = JSONResponse(
-                            {"error": "Unauthorized", "detail": "Invalid or revoked API Key"},
+                            {"status": "error", "error": "Unauthorized", "code": "missing_or_invalid_api_key", "detail": "Invalid or revoked API Key"},
                             status_code=401,
                         )
                         await res(scope, receive, send)
                         return
-                    current_ml_token_var.set(ml_token)
-                    global _latest_authenticated_token
-                    _latest_authenticated_token = ml_token
-                    if session_id:
-                        _mcp_active_sessions[session_id] = ml_token
+                    set_current_token(ml_token, session_id=session_id)
                 else:
-                    current_ml_token_var.set(None)
-                await self.inner_app(scope, receive, send)
+                    active_fallback = get_current_token()
+                    if active_fallback:
+                        set_current_token(active_fallback, session_id=session_id)
+                    else:
+                        set_current_token(None)
+
+                # Capture session-id emitted in response headers so future requests with that session-id authenticate seamlessly
+                async def mcp_send(message):
+                    if message["type"] == "http.response.start":
+                        for k, v in message.get("headers", []):
+                            if k.decode("latin-1").lower() in ("mcp-session-id", "x-mcp-session-id"):
+                                resp_sid = v.decode("latin-1").strip()
+                                active_tok = get_current_token()
+                                if resp_sid and active_tok:
+                                    register_session_token(resp_sid, active_tok)
+                    await send(message)
+
+                await self.inner_app(scope, receive, mcp_send)
                 return
 
             # For non-mcp routes, capture 404s to render 404.html

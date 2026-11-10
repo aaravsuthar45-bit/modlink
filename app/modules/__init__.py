@@ -31,6 +31,7 @@ from app.modules.notifications import register_notifications_tools
 from app.modules.server_config import register_server_config_tools
 from app.modules.diagnostics import register_diagnostics_tools
 from app.modules.premium import register_premium_tools
+from app.modules.server_builder import register_builder_tools
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ def register_all_modules(mcp: FastMCP) -> None:
         ("Server Configuration", register_server_config_tools),
         ("Developer Diagnostics", register_diagnostics_tools),
         ("Premium & Advanced", register_premium_tools),
+        ("Server Builder & Architecture", register_builder_tools),
     ]
 
     for name, registrar in modules:

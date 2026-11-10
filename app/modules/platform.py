@@ -25,17 +25,18 @@ def register_platform_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_mcp_server_health() -> str:
-        """Check overall health status of the ModLink MCP server and Discord gateway."""
-        token, guild, err = check_auth(None, PermissionLevel.read)
-        if err:
-            return err
-
+        """Check overall health status of the ModLink MCP server and Discord gateway.
+        Permissions: Public / Read diagnostic.
+        """
+        token = get_token()
         discord_ready = bot.is_ready()
         return json.dumps({
             "status": "healthy" if discord_ready else "degraded",
             "bot_connected": discord_ready,
             "bot_user": str(bot.user) if bot.user else None,
-            "guild_count": len(bot.guilds),
+            "latency_ms": round(bot.latency * 1000, 2) if bot.latency else None,
+            "authenticated": token is not None,
+            "client_name": token.client_name if token else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 

@@ -104,7 +104,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
         user_limit: int = 0,
     ) -> str:
         """Provision a dynamic temporary voice room that auto-deletes when empty."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -124,7 +124,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def delete_temporary_voice_channel(guild_id: str, channel_id: str) -> str:
         """Immediately delete a temporary voice channel."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -139,7 +139,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
         default_user_limit: int = 0,
     ) -> str:
         """Configure automated 'Join to Create' voice room creator system."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -156,7 +156,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def set_voice_channel_user_limit(guild_id: str, channel_id: str, limit: int) -> str:
         """Adjust the maximum member limit of a voice channel (0 for unlimited, 1-99)."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         if not guild:
@@ -175,7 +175,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def set_voice_channel_bitrate(guild_id: str, channel_id: str, bitrate_bps: int) -> str:
         """Modify the audio bitrate of a voice channel (8000 to 384000 depending on boost tier)."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         if not guild:
@@ -194,7 +194,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def set_voice_channel_region(guild_id: str, channel_id: str, region: Optional[str] = None) -> str:
         """Set or reset voice RTC region override."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         if not guild:
@@ -213,7 +213,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def lock_voice_channel(guild_id: str, channel_id: str) -> str:
         """Lock a voice channel so no new members can connect."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         if not guild:
@@ -232,7 +232,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unlock_voice_channel(guild_id: str, channel_id: str) -> str:
         """Unlock a previously locked voice channel."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         if not guild:
@@ -251,7 +251,7 @@ def register_voice_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def transfer_voice_channel_owner(guild_id: str, channel_id: str, new_owner_id: str) -> str:
         """Transfer ownership of a temporary voice room to another member."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 

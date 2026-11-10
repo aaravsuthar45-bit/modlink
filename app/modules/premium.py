@@ -106,7 +106,7 @@ def register_premium_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def draft_moderator_response(guild_id: str, situation: str, tone: str = "firm_and_fair") -> str:
         """Draft a polished, de-escalating moderation response to handle difficult members or disputes."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         draft = f"Hello. Please remember that respectful communication is required under our server rules. Let's redirect discussion back to the channel topic. Thank you!"
@@ -115,7 +115,7 @@ def register_premium_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def recommend_case_resolution(guild_id: str, case_id: str) -> str:
         """Recommend fair penalty or closure terms for an open moderation case based on precedent."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         return json.dumps({
@@ -139,7 +139,7 @@ def register_premium_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def generate_community_announcement(guild_id: str, topic: str, key_points: List[str]) -> str:
         """Draft a high-impact Discord announcement with formatting, headers, and clear calls to action."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         bullets = "\n".join([f"• {p}" for p in key_points])
@@ -207,7 +207,7 @@ def register_premium_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def investigate_member_report(guild_id: str, reported_user_id: str) -> str:
         """Compile a multi-dimensional investigation dossier on a member (reputation, recent messages, flags)."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         return json.dumps({
@@ -228,7 +228,7 @@ def register_premium_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def generate_investigation_timeline(guild_id: str, target_user_id: str) -> str:
         """Generate minute-by-minute timeline of a user's joins, role updates, and moderation actions."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         return json.dumps({"target_user_id": target_user_id, "timeline": []})
@@ -271,7 +271,7 @@ def register_premium_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def suggest_ticket_response(guild_id: str, ticket_id: str) -> str:
         """Suggest optimal response for an open member support ticket."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         return json.dumps({"ticket_id": ticket_id, "suggested_response": "Thanks for reaching out! Let me check that for you right now."})
@@ -279,7 +279,7 @@ def register_premium_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def escalate_support_conversation(guild_id: str, ticket_id: str, reason: str) -> str:
         """Escalate a difficult support ticket to senior staff."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
         return json.dumps({"ticket_id": ticket_id, "status": "escalated", "escalation_reason": reason})

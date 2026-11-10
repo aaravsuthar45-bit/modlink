@@ -44,7 +44,7 @@ def register_compliance_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def get_member_data_inventory(guild_id: str, user_id: str) -> str:
         """Catalog all data points stored concerning a specific user (GDPR Art. 15)."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -57,7 +57,7 @@ def register_compliance_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def export_member_data(guild_id: str, user_id: str) -> str:
         """Export all data associated with a member in machine-readable JSON (GDPR Art. 20 portability)."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -159,7 +159,7 @@ def register_compliance_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def get_member_consent(guild_id: str, user_id: str) -> str:
         """Check whether a user has opted into AI analysis or data collection."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -169,7 +169,7 @@ def register_compliance_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def record_member_consent(guild_id: str, user_id: str, consented: bool) -> str:
         """Record explicit consent grant or denial."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -180,7 +180,7 @@ def register_compliance_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def revoke_member_consent(guild_id: str, user_id: str) -> str:
         """Revoke consent and cease processing user messages."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 

@@ -28,7 +28,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def create_guild_memory(guild_id: str, key: str, value: str, category: str = "general") -> str:
         """Store persistent knowledge, server context, or guidelines for the AI assistant."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -59,7 +59,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def update_guild_memory(guild_id: str, key: str, new_value: str) -> str:
         """Update an existing server memory value."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -73,7 +73,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def delete_guild_memory(guild_id: str, key: str) -> str:
         """Delete a memory item."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -101,7 +101,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def add_guild_preference(guild_id: str, preference_name: str, value: Any) -> str:
         """Save AI behavior preferences (tone, strictness, response style)."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -122,7 +122,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def update_guild_preferences(guild_id: str, preferences: dict) -> str:
         """Bulk update AI assistant behavioral preferences."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -138,7 +138,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
         explanation: str,
     ) -> str:
         """Teach the AI moderation model few-shot examples specific to server humor and norms."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -179,7 +179,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def create_member_assistant_profile(guild_id: str, user_id: str, persona_notes: str) -> str:
         """Record member preferences or assistant interaction context."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -200,7 +200,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def update_member_assistant_profile(guild_id: str, user_id: str, updates: dict) -> str:
         """Update assistant memory notes for a member."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -210,7 +210,7 @@ def register_memory_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def delete_member_assistant_profile(guild_id: str, user_id: str) -> str:
         """Delete member assistant memory."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 

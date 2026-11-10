@@ -31,7 +31,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def create_suggestion(guild_id: str, author_id: str, title: str, description: str) -> str:
         """Submit a new community suggestion for server feedback and voting."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -80,7 +80,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def approve_suggestion(guild_id: str, suggestion_id: str, moderator_comment: Optional[str] = None) -> str:
         """Approve a community suggestion."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -94,7 +94,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def reject_suggestion(guild_id: str, suggestion_id: str, reason: str) -> str:
         """Reject a community suggestion with feedback."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -108,7 +108,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def mark_suggestion_implemented(guild_id: str, suggestion_id: str) -> str:
         """Mark an approved suggestion as implemented in the server."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -118,7 +118,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def vote_on_suggestion(guild_id: str, suggestion_id: str, user_id: str, vote_type: str) -> str:
         """Cast an upvote or downvote on a suggestion."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -159,7 +159,7 @@ def register_community_tools(mcp: FastMCP) -> None:
         allow_multiple: bool = False,
     ) -> str:
         """Create an advanced community poll with time-limited voting."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -181,7 +181,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def close_poll(guild_id: str, poll_id: str) -> str:
         """Close an active poll and finalize vote results."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -222,7 +222,7 @@ def register_community_tools(mcp: FastMCP) -> None:
         required_role_id: Optional[str] = None,
     ) -> str:
         """Create a server giveaway with automated winner selection and role requirements."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -245,7 +245,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def end_giveaway(guild_id: str, giveaway_id: str) -> str:
         """End a giveaway immediately and draw the winners randomly from entrants."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -263,7 +263,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def reroll_giveaway(guild_id: str, giveaway_id: str, count: int = 1) -> str:
         """Reroll new winners for a finished giveaway."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -296,7 +296,7 @@ def register_community_tools(mcp: FastMCP) -> None:
         location: Optional[str] = None,
     ) -> str:
         """Schedule a community event or tournament."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -317,7 +317,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def manage_event_participants(guild_id: str, event_id: str, user_id: str, action: str) -> str:
         """Register or remove a participant from an event."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -349,7 +349,7 @@ def register_community_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def create_member_birthday(guild_id: str, user_id: str, month: int, day: int) -> str:
         """Register a member birthday for automated celebration announcements."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 

@@ -34,7 +34,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
         description: Optional[str] = None,
     ) -> str:
         """Open a critical security incident for coordinated staff response."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -84,7 +84,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def update_security_incident(guild_id: str, incident_id: str, updates: dict) -> str:
         """Update severity, notes, or classification of an incident."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -94,7 +94,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def close_security_incident(guild_id: str, incident_id: str, resolution_summary: str) -> str:
         """Close an incident and log post-mortem resolution."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -116,7 +116,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def assign_incident_responder(guild_id: str, incident_id: str, responder_id: str) -> str:
         """Assign primary incident commander / responder."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -138,7 +138,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def collect_incident_evidence(guild_id: str, incident_id: str, evidence_type: str, evidence_payload: str) -> str:
         """Attach message dumps, user IDs, or logs as evidence to an incident."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -236,7 +236,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def enable_raid_protection(guild_id: str, auto_kick_suspicious: bool = False) -> str:
         """Engage active anti-raid lockdown mode across the server."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -247,7 +247,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def disable_raid_protection(guild_id: str) -> str:
         """Disengage anti-raid lockdown mode and restore normal join flow."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -261,7 +261,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
         action: str = "quarantine",
     ) -> str:
         """Configure automated thresholds and actions for raid detection."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -272,7 +272,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def enable_suspicious_join_mode(guild_id: str) -> str:
         """Require extra CAPTCHA or verification steps for new joins."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -281,7 +281,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def disable_suspicious_join_mode(guild_id: str) -> str:
         """Disable high-security join mode."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -299,7 +299,7 @@ def register_incidents_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def notify_security_team(guild_id: str, alert_message: str) -> str:
         """Broadcast emergency alert ping to designated staff security channel."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 

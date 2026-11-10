@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import discord
 from sqlalchemy import select, delete
 
-from app.auth import AccessToken as ModLinkToken, PermissionLevel, has_permission
+from app.auth import AccessToken as ModLinkToken, PermissionLevel, has_permission, get_current_token
 from app.database import (
     AsyncSessionLocal,
     AuditLog,
@@ -25,13 +25,70 @@ from app.discord_bot import bot
 logger = logging.getLogger(__name__)
 
 
+# ── Structured Error Formatting ───────────────────────────────────────────────
+
+def make_error(
+    code: str,
+    message: str,
+    hint: str,
+    status: str = "error",
+    **extra: Any,
+) -> str:
+    """Return a standard JSON error response string with structured fields: status, code, message, hint."""
+    payload = {
+        "status": status,
+        "error": code,
+        "code": code,
+        "message": message,
+        "hint": hint,
+    }
+    if extra:
+        payload.update(extra)
+    return json.dumps(payload, indent=2)
+
+
+def format_discord_error(exc: Exception, action_context: str = "performing action") -> str:
+    """Convert common Discord exceptions into clear, structured error responses."""
+    if isinstance(exc, discord.Forbidden):
+        return make_error(
+            code="missing_permission",
+            message=f"Discord API rejected action: Forbidden ({exc.text or str(exc)})",
+            hint="Check that the bot has the required Discord permissions (e.g. Manage Channels, Manage Roles, Administrator) and that the bot's role is positioned higher than target roles.",
+        )
+    elif isinstance(exc, discord.NotFound):
+        return make_error(
+            code="not_found",
+            message=f"Discord target entity not found ({action_context}): {exc.text or str(exc)}",
+            hint="Ensure the provided ID (channel, role, user, message) is valid and exists on the server.",
+        )
+    elif isinstance(exc, discord.HTTPException):
+        if getattr(exc, "code", None) == 50013:
+            return make_error(
+                code="missing_permission",
+                message=f"Missing Discord permissions while {action_context}: {exc.text}",
+                hint="Grant the bot the required permissions in Discord Server Settings.",
+            )
+        elif getattr(exc, "code", None) == 50028:
+            return make_error(
+                code="bot_role_too_low",
+                message=f"Role hierarchy conflict: Bot's highest role is lower than or equal to the target role.",
+                hint="Open Discord Server Settings > Roles and drag the bot's role above the target role.",
+            )
+        return make_error(
+            code="discord_api_error",
+            message=f"Discord API error ({exc.status} {getattr(exc, 'code', 'N/A')}): {exc.text or str(exc)}",
+            hint="Verify rate limits and Discord payload requirements.",
+        )
+    return make_error(
+        code="internal_error",
+        message=f"Unexpected error while {action_context}: {str(exc)}",
+        hint="Inspect input parameters or check bot health.",
+    )
+
+
 def get_token() -> Optional[ModLinkToken]:
-    """Retrieve current token from mcp_server ContextVar."""
-    try:
-        from app.mcp_server import _get_ml_token
-        return _get_ml_token()
-    except Exception:
-        return None
+    """Retrieve current token from unified auth context."""
+    return get_current_token()
 
 
 async def audit_log(
@@ -75,19 +132,27 @@ def check_auth(
     """
     token = get_token()
     if token is None:
-        return None, None, json.dumps({"error": "Unauthenticated: Valid ModLink API key is required."})
+        return None, None, make_error(
+            code="missing_or_invalid_api_key",
+            message="Unauthenticated: Valid ModLink API key is required.",
+            hint="Provide your ModLink API key in the Authorization: Bearer <key> header or configure your connection in the dashboard.",
+        )
 
     if guild_id and token.allowed_guild_ids and "*" not in token.allowed_guild_ids:
         allowed_str = [str(g).strip() for g in token.allowed_guild_ids]
         if str(guild_id).strip() not in allowed_str:
-            return token, None, json.dumps({
-                "error": "Forbidden: Your API key is not authorized for server ID " + str(guild_id)
-            })
+            return token, None, make_error(
+                code="guild_not_authorized",
+                message=f"Forbidden: Your API key is not authorized for server ID '{guild_id}'.",
+                hint=f"Authorize server ID '{guild_id}' in the connection's allowed guilds via the ModLink dashboard.",
+            )
 
     if not has_permission(token, required_perm):
-        return token, None, json.dumps({
-            "error": f"Forbidden: This tool requires '{required_perm.value}' permission, but your connection has '{token.permission_level.value}'."
-        })
+        return token, None, make_error(
+            code="insufficient_permission",
+            message=f"Forbidden: This tool requires '{required_perm.value}' permission, but your connection only has '{token.permission_level.value}'.",
+            hint=f"Upgrade the connection's permission level to '{required_perm.value}' or 'admin' in the ModLink dashboard.",
+        )
 
     guild = None
     if guild_id:

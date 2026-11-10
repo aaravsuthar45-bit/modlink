@@ -29,7 +29,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def create_knowledge_base(guild_id: str, name: str, description: Optional[str] = None) -> str:
         """Create a dedicated AI knowledge base for server rules, FAQs, and guides."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -76,7 +76,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
         tags: Optional[List[str]] = None,
     ) -> str:
         """Add a document, policy, or markdown article to the knowledge base."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -96,7 +96,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def update_knowledge_document(guild_id: str, doc_id: str, updates: dict) -> str:
         """Update content or metadata of an existing knowledge document."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -106,7 +106,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def delete_knowledge_document(guild_id: str, doc_id: str) -> str:
         """Remove a document from the knowledge base."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -147,7 +147,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def index_server_rules(guild_id: str, rules_text: str) -> str:
         """Index raw server rules text for AI-assisted enforcement and citation."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -166,7 +166,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def index_server_faq(guild_id: str) -> str:
         """Re-index all server FAQs into the vector search memory."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -176,7 +176,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def create_server_faq(guild_id: str, question: str, answer: str, category: Optional[str] = None) -> str:
         """Create a new Frequently Asked Question entry."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -195,7 +195,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def update_server_faq(guild_id: str, faq_id: str, updates: dict) -> str:
         """Update an existing FAQ entry."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -205,7 +205,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def delete_server_faq(guild_id: str, faq_id: str) -> str:
         """Delete an FAQ entry."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -279,7 +279,7 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def reindex_knowledge_base(guild_id: str) -> str:
         """Trigger a complete re-indexing pass over all documents and FAQs."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 

@@ -34,7 +34,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
         mention_role_id: Optional[str] = None,
     ) -> str:
         """Create an automated notification rule alerting staff on specific events."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -55,7 +55,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def update_notification_rule(guild_id: str, rule_id: str, updates: dict) -> str:
         """Update notification rule destination or conditions."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -65,7 +65,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def delete_notification_rule(guild_id: str, rule_id: str) -> str:
         """Delete an alert notification rule."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -85,7 +85,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def send_staff_notification(guild_id: str, message: str, priority: str = "normal") -> str:
         """Dispatch a staff alert message to the server's staff log channel."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -97,7 +97,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def send_role_notification(guild_id: str, role_id: str, message: str) -> str:
         """Send notification targeting holders of a specific role."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -106,7 +106,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def send_incident_notification(guild_id: str, incident_id: str, alert_text: str) -> str:
         """Broadcast high-priority incident status to emergency responders."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -120,7 +120,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
         scheduled_time_iso: str,
     ) -> str:
         """Schedule a notification or announcement for a future time."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -149,7 +149,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def configure_notification_preferences(guild_id: str, dms_enabled: bool = False, staff_channel_id: Optional[str] = None) -> str:
         """Configure default notification targets and preferences."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -158,7 +158,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def create_event_subscription(guild_id: str, event_type: str, webhook_or_channel: str) -> str:
         """Subscribe to real-time events (member_join, member_leave, ban, role_change)."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 
@@ -170,7 +170,7 @@ def register_notifications_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     async def delete_event_subscription(guild_id: str, sub_id: str) -> str:
         """Cancel an event subscription."""
-        token, guild, err = check_auth(guild_id, PermissionLevel.operator)
+        token, guild, err = check_auth(guild_id, PermissionLevel.moderate)
         if err:
             return err
 

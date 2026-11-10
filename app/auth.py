@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import httpx
 from sqlalchemy import select
@@ -42,6 +43,39 @@ class AccessToken:
     permission_level: PermissionLevel
     autonomous_mode: bool
     scopes: List[str] = field(default_factory=list)
+
+
+# ── Request authentication context ───────────────────────────────────────────
+
+current_token_var: ContextVar[Optional[AccessToken]] = ContextVar("current_token_var", default=None)
+_active_sessions: Dict[str, AccessToken] = {}
+_latest_token: Optional[AccessToken] = None
+
+
+def set_current_token(token: Optional[AccessToken], session_id: Optional[str] = None) -> None:
+    """Set the authenticated token for the current async task and optionally map a session ID."""
+    current_token_var.set(token)
+    global _latest_token
+    if token is not None:
+        _latest_token = token
+        if session_id:
+            _active_sessions[str(session_id)] = token
+
+
+def get_current_token() -> Optional[AccessToken]:
+    """Retrieve the current authenticated token (from ContextVar, active sessions, or latest)."""
+    tok = current_token_var.get()
+    if tok is not None:
+        return tok
+    if _active_sessions:
+        return list(_active_sessions.values())[-1]
+    return _latest_token
+
+
+def register_session_token(session_id: str, token: AccessToken) -> None:
+    """Associate an MCP session ID with an authenticated token."""
+    if session_id and token:
+        _active_sessions[str(session_id)] = token
 
 
 # ── Key hashing ──────────────────────────────────────────────────────────────

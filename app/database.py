@@ -91,9 +91,10 @@ class AuditResult(str, enum.Enum):
 
 class PermissionLevel(str, enum.Enum):
     read = "read"            # list_servers, get_server_info, read messages
-    moderate = "moderate"    # timeout, delete message
-    manage = "manage"        # kick, change nickname
-    admin = "admin"          # ban (still subject to per-action approval)
+    moderate = "moderate"    # timeout, delete message, announcements
+    manage = "manage"        # kick, change nickname, manage channels/roles
+    admin = "admin"          # ban, backups, full server blueprint (approval rules apply)
+    operator = "moderate"    # backward-compatibility alias to moderate
 
 
 # ── Models ───────────────────────────────────────────────────────────────────
