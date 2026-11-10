@@ -90,9 +90,12 @@ class GuildConfigUpdate(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _hash_key(raw: str) -> str:
-    return hmac.new(
-        settings.dashboard_secret.encode(), raw.encode(), hashlib.sha256
-    ).hexdigest()
+    """
+    Hash an API key using plain SHA-256 (must match app/auth.py).
+    Deterministic and independent of DASHBOARD_SECRET so hashes remain valid
+    across secret rotations and re-deployments.
+    """
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 # ── Router & Handlers ─────────────────────────────────────────────────────────

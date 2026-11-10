@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
-import hmac
 import secrets
 import sys
 from pathlib import Path
@@ -21,14 +20,16 @@ from pathlib import Path
 # Ensure project root is on the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.config import settings
 from app.database import AIConnection, AsyncSessionLocal, ConnectionStatus, PermissionLevel, init_db
 
 
 def _hash_key(raw: str) -> str:
-    return hmac.new(
-        settings.dashboard_secret.encode(), raw.encode(), hashlib.sha256
-    ).hexdigest()
+    """
+    Hash an API key using plain SHA-256 (must match app/auth.py).
+    Deterministic and independent of DASHBOARD_SECRET so hashes remain valid
+    across secret rotations and re-deployments.
+    """
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 async def main() -> None:
