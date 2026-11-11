@@ -14,7 +14,7 @@ from mcp.server.mcpserver import MCPServer as FastMCP
 from app.auth import PermissionLevel
 from app.database import AuditResult
 from app.discord_bot import bot
-from app.modules.common import DataStore, audit_log, check_auth
+from app.modules.common import DataStore, audit_log, check_auth, format_discord_error
 
 logger = logging.getLogger(__name__)
 
@@ -180,17 +180,20 @@ def register_knowledge_tools(mcp: FastMCP) -> None:
         if err:
             return err
 
-        faq_id = f"faq_{secrets.token_urlsafe(6)}"
-        doc = {
-            "faq_id": faq_id,
-            "guild_id": guild_id,
-            "question": question,
-            "answer": answer,
-            "category": category or "General",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        await faq_store.create(faq_id, guild_id, doc)
-        return json.dumps({"status": "created", "faq": doc})
+        try:
+            faq_id = f"faq_{secrets.token_urlsafe(6)}"
+            doc = {
+                "faq_id": faq_id,
+                "guild_id": guild_id,
+                "question": question,
+                "answer": answer,
+                "category": category or "General",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await faq_store.create(faq_id, guild_id, doc)
+            return json.dumps({"status": "created", "faq": doc})
+        except Exception as exc:
+            return format_discord_error(exc, action_context=f"creating FAQ in guild {guild_id}")
 
     @mcp.tool()
     async def update_server_faq(guild_id: str, faq_id: str, updates: dict) -> str:

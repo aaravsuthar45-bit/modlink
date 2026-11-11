@@ -15,7 +15,7 @@ from mcp.server.mcpserver import MCPServer as FastMCP
 from app.auth import PermissionLevel
 from app.database import AuditResult
 from app.discord_bot import bot
-from app.modules.common import DataStore, audit_log, check_auth
+from app.modules.common import DataStore, audit_log, check_auth, format_discord_error
 
 logger = logging.getLogger(__name__)
 
@@ -163,20 +163,23 @@ def register_community_tools(mcp: FastMCP) -> None:
         if err:
             return err
 
-        poll_id = f"poll_{secrets.token_urlsafe(6)}"
-        doc = {
-            "poll_id": poll_id,
-            "guild_id": guild_id,
-            "question": question,
-            "options": options,
-            "duration_hours": duration_hours,
-            "allow_multiple": allow_multiple,
-            "votes": {},
-            "active": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        await poll_store.create(poll_id, guild_id, doc)
-        return json.dumps({"status": "created", "poll": doc})
+        try:
+            poll_id = f"poll_{secrets.token_urlsafe(6)}"
+            doc = {
+                "poll_id": poll_id,
+                "guild_id": guild_id,
+                "question": question,
+                "options": options,
+                "duration_hours": duration_hours,
+                "allow_multiple": allow_multiple,
+                "votes": {},
+                "active": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await poll_store.create(poll_id, guild_id, doc)
+            return json.dumps({"status": "created", "poll": doc})
+        except Exception as exc:
+            return format_discord_error(exc, action_context=f"creating poll in guild {guild_id}")
 
     @mcp.tool()
     async def close_poll(guild_id: str, poll_id: str) -> str:
