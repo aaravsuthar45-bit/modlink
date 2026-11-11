@@ -12,6 +12,7 @@ Start with:
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -29,7 +30,8 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse, RedirectResponse, Response
+from app.rate_limiter import global_rate_limiter
 from starlette.routing import Mount, Route
 
 from app.auth import (
@@ -510,6 +512,24 @@ async def ban_member(
             return json.dumps(data, indent=2)
 
         guild = await get_guild(guild_id)
+        # Attempt to DM the user before banning (DMs are unavailable after ban)
+        try:
+            member = guild.get_member(int(user_id))
+            if member is None:
+                try:
+                    member = await guild.fetch_member(int(user_id))
+                except Exception:
+                    member = None
+            if member is not None:
+                dm_channel = await member.create_dm()
+                await dm_channel.send(
+                    f"You have been banned from **{guild.name}**.\n"
+                    f"**Reason:** {reason}\n\n"
+                    f"If you believe this is a mistake, please contact the server administrators."
+                )
+        except Exception as _dm_exc:
+            logger.debug("Could not DM user %s before ban (DMs may be closed): %s", user_id, _dm_exc)
+
         await guild.ban(
             discord.Object(id=int(user_id)),
             reason=reason,
@@ -534,6 +554,121 @@ async def ban_member(
                      result=AuditResult.error, result_detail=str(exc),
                      target_user_id=user_id)
         return format_discord_error(exc, action_context="ban_member")
+
+
+@mcp.tool(
+    name="handoff_case_to_moderator",
+    description=(
+        "Moderator handoff sub-tool: Pass a moderation case to another moderator with notes, "
+        "status, and proposed action. Asks the other moderator via direct message for their opinion "
+        "or approval before executing sensitive tasks, or transfers shift ownership of an active incident. "
+        "Returns a unique case handoff ID and dispatch status."
+    ),
+)
+async def handoff_case_to_moderator(
+    guild_id: str,
+    target_moderator_user_id: str,
+    case_summary: str,
+    proposed_action: str = "",
+    notes: str = "",
+    status: str = "pending_peer_review",
+    tool_name: str = "",
+) -> str:
+    token = _get_ml_token()
+    if token is None:
+        return json.dumps({"error": "Unauthenticated"})
+
+    args = {
+        "guild_id": guild_id,
+        "target_moderator_user_id": target_moderator_user_id,
+        "case_summary": case_summary,
+        "proposed_action": proposed_action,
+        "notes": notes,
+        "status": status,
+        "tool_name": tool_name,
+    }
+    try:
+        _require_guild_access(token, guild_id)
+        _require_permission(token, PermissionLevel.moderate)
+
+        import uuid as _uuid
+        handoff_id = f"CASE-{str(_uuid.uuid4())[:8].upper()}"
+
+        guild = await get_guild(guild_id)
+        target_member = guild.get_member(int(target_moderator_user_id))
+        if target_member is None:
+            try:
+                target_member = await guild.fetch_member(int(target_moderator_user_id))
+            except Exception:
+                target_member = None
+
+        dm_delivered = False
+        dm_error = None
+        if target_member is not None:
+            try:
+                dm = await target_member.create_dm()
+                sender_name = token.client_name or f"AI Moderator (ID: {token.connection_id})"
+                msg_lines = [
+                    f"🛡️ **ModLink Peer Review & Moderator Handoff**",
+                    f"**Case ID:** `{handoff_id}`",
+                    f"**Server:** {guild.name} (`{guild_id}`)",
+                    f"**Initiated by:** {sender_name}",
+                    f"**Status:** {status}",
+                    f"**Summary:** {case_summary}",
+                ]
+                if proposed_action:
+                    msg_lines.append(f"**Proposed Action:** `{proposed_action}`")
+                if tool_name:
+                    msg_lines.append(f"**Target MCP Tool:** `{tool_name}`")
+                if notes:
+                    msg_lines.append(f"**Notes:**\n{notes}")
+
+                msg_lines.append(
+                    "\n*Please review this action and advise or take over the case in your server moderation channel.*"
+                )
+                await dm.send("\n".join(msg_lines))
+                dm_delivered = True
+            except Exception as _dm_e:
+                dm_error = str(_dm_e)
+                logger.warning("Failed to dispatch moderator handoff DM to %s: %s", target_moderator_user_id, _dm_e)
+        else:
+            dm_error = f"Moderator with user ID {target_moderator_user_id} not found in guild."
+
+        result = {
+            "handoff_id": handoff_id,
+            "guild_id": guild_id,
+            "guild_name": guild.name,
+            "target_moderator_id": target_moderator_user_id,
+            "target_moderator_name": str(target_member) if target_member else None,
+            "dm_delivered": dm_delivered,
+            "dm_error": dm_error,
+            "status": status,
+            "proposed_action": proposed_action,
+            "case_summary": case_summary,
+            "notes": notes,
+        }
+
+        await _audit(
+            connection_id=token.connection_id,
+            guild_id=guild_id,
+            tool_name="handoff_case_to_moderator",
+            arguments=args,
+            result=AuditResult.success,
+            result_detail=f"Handoff {handoff_id} sent to moderator {target_moderator_user_id} (delivered={dm_delivered})",
+            target_user_id=target_moderator_user_id,
+        )
+        return json.dumps(result, indent=2)
+
+    except PermissionError as exc:
+        await _audit(connection_id=token.connection_id, guild_id=guild_id,
+                     tool_name="handoff_case_to_moderator", arguments=args,
+                     result=AuditResult.denied, result_detail=str(exc))
+        return json.dumps({"error": "Permission denied", "detail": str(exc)})
+    except Exception as exc:
+        await _audit(connection_id=token.connection_id, guild_id=guild_id,
+                     tool_name="handoff_case_to_moderator", arguments=args,
+                     result=AuditResult.error, result_detail=str(exc))
+        return format_discord_error(exc, action_context="handoff_case_to_moderator")
 
 
 
@@ -3659,22 +3794,87 @@ def build_app() -> Starlette:
         client_info = register_client(data)
         return JSONResponse(client_info, status_code=201)
 
-    async def oauth_authorize(request: Request) -> RedirectResponse:
+    async def oauth_authorize(request: Request) -> Response:
         """
         OAuth 2.0 Authorization Endpoint (RFC 6749 + RFC 7636).
-        Authenticates the user via Discord, then returns an authorization_code to Claude/Cursor.
-
-        Security requirements enforced here:
-        - redirect_uri must be registered for the client (prevents open redirect / code theft).
-        - PKCE with S256 is mandatory for all clients (prevents code interception).
-        - client_id must be provided.
+        Requires registered client, exact redirect_uri match, PKCE S256,
+        and an explicit user consent approval screen.
         """
+        if request.method == "POST":
+            try:
+                form = await request.form()
+            except Exception:
+                form = {}
+            action = form.get("action", "deny")
+            client_id = form.get("client_id", "")
+            redirect_uri = form.get("redirect_uri", "")
+            state = form.get("state", "")
+            code_challenge = form.get("code_challenge", "")
+            code_challenge_method = form.get("code_challenge_method", "S256")
+            session_token = form.get("session_token", "") or request.cookies.get("modlink_session", "")
+
+            from app.oauth import get_client
+            client_meta = get_client(client_id)
+            if not client_meta:
+                return RedirectResponse("/?error=unauthorized_client", status_code=302)
+
+            allowed_uris = client_meta.get("redirect_uris", [])
+            req_norm = redirect_uri.rstrip("/")
+            if not any(u == redirect_uri or u.rstrip("/") == req_norm for u in allowed_uris):
+                return RedirectResponse("/?error=redirect_uri_not_registered", status_code=302)
+
+            sep = "&" if "?" in redirect_uri else "?"
+            from urllib.parse import urlencode as _qenc
+
+            if action != "approve":
+                cb_data = {"error": "access_denied", "error_description": "User denied the authorization request"}
+                if state:
+                    cb_data["state"] = state
+                return RedirectResponse(f"{redirect_uri}{sep}{_qenc(cb_data)}", status_code=302)
+
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            async with AsyncSessionLocal() as session:
+                from app.database import UserSession
+                res = await session.execute(
+                    select(UserSession).where(
+                        UserSession.id == session_token,
+                        UserSession.expires_at > now,
+                    )
+                )
+                user_sess = res.scalars().first()
+                if not user_sess or not user_sess.api_key:
+                    return RedirectResponse("/auth/discord/login?error=session_expired", status_code=302)
+
+                from app.crypto import decrypt_secret
+                raw_api_key = decrypt_secret(user_sess.api_key)
+                if not raw_api_key or not raw_api_key.startswith("ml_live_"):
+                    return RedirectResponse("/dashboard?error=invalid_key", status_code=302)
+
+                from app.oauth import issue_authorization_code
+                auth_code = issue_authorization_code(
+                    client_id=client_id,
+                    redirect_uri=redirect_uri,
+                    api_key=raw_api_key,
+                    discord_user_id=user_sess.discord_user_id,
+                    discord_username=user_sess.discord_username,
+                    code_challenge=code_challenge,
+                    code_challenge_method=code_challenge_method,
+                )
+                cb_data = {"code": auth_code}
+                if state:
+                    cb_data["state"] = state
+                logger.info("User %s approved authorization for MCP client %s", user_sess.discord_username, client_meta.get("client_name"))
+                return RedirectResponse(f"{redirect_uri}{sep}{_qenc(cb_data)}", status_code=302)
+
+        # GET request handling:
         params = request.query_params
         redirect_uri = params.get("redirect_uri", "")
         state = params.get("state", "")
         client_id = params.get("client_id", "")
         code_challenge = params.get("code_challenge", "")
         code_challenge_method = params.get("code_challenge_method", "S256")
+        requested_scope = params.get("scope", "modlink:access modlink:read")
 
         if not redirect_uri:
             return RedirectResponse("/?error=missing_redirect_uri", status_code=302)
@@ -3682,34 +3882,39 @@ def build_app() -> Starlette:
         if not client_id:
             return RedirectResponse("/?error=missing_client_id", status_code=302)
 
-        # PKCE S256 is mandatory — reject flows that don't send a code_challenge.
+        # Require a registered client (RFC 7591 / RFC 6749)
+        from app.oauth import get_client
+        client_meta = get_client(client_id)
+        if not client_meta:
+            return RedirectResponse(
+                "/?error=unauthorized_client&error_description=Client+is+not+registered",
+                status_code=302,
+            )
+
+        # Strict validation: redirect_uri must match client's registered redirect_uris
+        allowed_uris = client_meta.get("redirect_uris", [])
+        normalized_req = redirect_uri.rstrip("/")
+        if not any(u == redirect_uri or u.rstrip("/") == normalized_req for u in allowed_uris):
+            return RedirectResponse(
+                "/?error=redirect_uri_not_registered&error_description=Redirect+URI+does+not+match+registered+client",
+                status_code=302,
+            )
+
+        # PKCE S256 is mandatory
         if not code_challenge:
             return RedirectResponse(
-                f"/?error=pkce_required&error_description=PKCE+code_challenge+is+required",
+                "/?error=pkce_required&error_description=PKCE+code_challenge+is+required",
                 status_code=302,
             )
         if code_challenge_method.upper() not in ("S256",):
             return RedirectResponse(
-                f"/?error=invalid_pkce_method&error_description=Only+S256+is+supported",
+                "/?error=invalid_pkce_method&error_description=Only+S256+is+supported",
                 status_code=302,
             )
 
-        # Validate redirect_uri against the registered client's allowed list.
-        from app.oauth import get_client
-        client_meta = get_client(client_id)
-        if client_meta:
-            allowed_uris = client_meta.get("redirect_uris", [])
-            normalized_req = redirect_uri.rstrip("/")
-            if allowed_uris and not any(u.rstrip("/") == normalized_req for u in allowed_uris):
-                return RedirectResponse(
-                    "/?error=redirect_uri_not_registered",
-                    status_code=302,
-                )
-        # (If the client is not registered via DCR, we allow the request but
-        #  PKCE is already enforced above. Registered clients get strict URI checks.)
-
-        # 1. Check if user already has an active ModLink Discord session
+        # Check if user has an active Discord session
         session_token = request.cookies.get("modlink_session")
+        user_sess = None
         if session_token:
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
@@ -3722,29 +3927,37 @@ def build_app() -> Starlette:
                     )
                 )
                 user_sess = res.scalars().first()
-                if user_sess and user_sess.api_key:
-                    from app.crypto import decrypt_secret
-                    raw_api_key = decrypt_secret(user_sess.api_key)
-                    if raw_api_key and raw_api_key.startswith("ml_live_"):
-                        from app.oauth import issue_authorization_code
-                        auth_code = issue_authorization_code(
-                            client_id=client_id,
-                            redirect_uri=redirect_uri,
-                            api_key=raw_api_key,
-                            discord_user_id=user_sess.discord_user_id,
-                            discord_username=user_sess.discord_username,
-                            code_challenge=code_challenge,
-                            code_challenge_method=code_challenge_method,
-                        )
-                        from urllib.parse import urlencode as _qenc
-                        sep = "&" if "?" in redirect_uri else "?"
-                        cb_data = {"code": auth_code}
-                        if state:
-                            cb_data["state"] = state
-                        logger.info("Instantly authorized active user %s for MCP client", user_sess.discord_username)
-                        return RedirectResponse(f"{redirect_uri}{sep}{_qenc(cb_data)}", status_code=302)
 
-        # 2. User is not yet logged in: store the MCP OAuth request in a cookie and redirect to Discord login
+        # If logged in: present the explicit OAuth consent screen (never auto-redirect)
+        if user_sess:
+            from pathlib import Path
+            template_path = Path(__file__).parent / "templates" / "oauth_consent.html"
+            template = template_path.read_text(encoding="utf-8") if template_path.exists() else ""
+            if not template:
+                from app.portal import _load_template
+                template = _load_template("oauth_consent.html")
+
+            client_name = client_meta.get("client_name") or client_id
+            admin_guilds = user_sess.admin_guilds or []
+            guild_tags = "".join(f'<span class="server-tag">{g.get("name","Server")}</span>' for g in admin_guilds) if admin_guilds else '<span class="server-tag">No servers yet</span>'
+
+            rendered = (
+                template.replace("{client_name}", client_name)
+                .replace("{discord_username}", user_sess.discord_username)
+                .replace("{discord_avatar}", user_sess.avatar_url or "/static/logo.png")
+                .replace("{scope_display}", requested_scope)
+                .replace("{server_count}", str(len(admin_guilds)))
+                .replace("{server_tags_html}", guild_tags)
+                .replace("{client_id}", client_id)
+                .replace("{redirect_uri}", redirect_uri)
+                .replace("{state}", state)
+                .replace("{code_challenge}", code_challenge)
+                .replace("{code_challenge_method}", code_challenge_method)
+                .replace("{session_token}", session_token)
+            )
+            return HTMLResponse(rendered)
+
+        # If not logged in: store the MCP OAuth request in a cookie and redirect to Discord login
         from app.portal import _get_public_base
         base = _get_public_base(request)
         flow_data = {
@@ -3825,7 +4038,7 @@ def build_app() -> Starlette:
             "access_token": api_key,
             "token_type": "Bearer",
             "expires_in": 30 * 86400,
-            "scope": "modlink:access modlink:admin",
+            "scope": "modlink:access modlink:read",
             "user": {
                 "id": record.get("discord_user_id"),
                 "username": record.get("discord_username"),
@@ -3872,6 +4085,36 @@ def build_app() -> Starlette:
                 return
 
             path = scope.get("path", "")
+
+            # Rate limiting for sensitive endpoints (1 request per 1/10 of a sec per user/IP)
+            if (
+                path.startswith("/mcp")
+                or path in ("/authorize", "/token", "/register")
+                or path.startswith("/auth/discord/login")
+            ):
+                client_host = "unknown"
+                if scope.get("client"):
+                    client_host = scope["client"][0]
+                for hk, hv in scope.get("headers", []):
+                    if hk.decode("latin-1").lower() == "x-forwarded-for":
+                        client_host = hv.decode("latin-1").split(",")[0].strip()
+                        break
+
+                rate_key = f"{path.split('/')[1]}:{client_host}"
+                allowed, retry_after = global_rate_limiter.check(rate_key)
+                if not allowed:
+                    res = JSONResponse(
+                        {
+                            "error": "rate_limited",
+                            "error_description": "Rate limit exceeded. Try again in 1/10 of a sec.",
+                            "retry_after_sec": 0.1,
+                        },
+                        status_code=429,
+                        headers={"Retry-After": "0.1"},
+                    )
+                    await res(scope, receive, send)
+                    return
+
             # Enforce API key auth on /mcp endpoints
             if path.startswith("/mcp"):
                 raw_token = None

@@ -35,6 +35,7 @@ from app.database import (
     AIConnection,
     AsyncSessionLocal,
     ConnectionStatus,
+    GuildConfig,
     PermissionLevel,
     UserSession,
 )
@@ -468,7 +469,7 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
                 description=f"Auto-generated OAuth key for Discord user {discord_user_id} ({discord_username})",
                 api_key_hash=key_hash,
                 allowed_guild_ids=admin_ids,
-                permission_level=PermissionLevel.admin,
+                permission_level=PermissionLevel.read,
                 autonomous_mode=False,
                 status=ConnectionStatus.active,
             )
@@ -495,31 +496,26 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
         await session.commit()
 
     # 9. Determine target redirect (MCP Client callback e.g. Claude / Cursor, or Dashboard)
+    # 9. Determine target redirect (MCP Client authorization consent screen, or Dashboard)
     target_redirect = "/dashboard"
     mcp_flow_cookie = request.cookies.get("mcp_oauth_flow")
     if mcp_flow_cookie:
         try:
             flow_json = base64.urlsafe_b64decode(mcp_flow_cookie.encode("ascii")).decode("utf-8")
             flow_data = json.loads(flow_json)
+            client_id = flow_data.get("client_id")
             client_redirect_uri = flow_data.get("redirect_uri")
-            if client_redirect_uri:
-                from app.oauth import issue_authorization_code
-                auth_code = issue_authorization_code(
-                    client_id=flow_data.get("client_id"),
-                    redirect_uri=client_redirect_uri,
-                    api_key=raw_api_key,
-                    discord_user_id=discord_user_id,
-                    discord_username=discord_username,
-                    code_challenge=flow_data.get("code_challenge"),
-                    code_challenge_method=flow_data.get("code_challenge_method"),
-                )
+            if client_id and client_redirect_uri:
                 from urllib.parse import urlencode as _qenc
-                sep = "&" if "?" in client_redirect_uri else "?"
-                cb_data = {"code": auth_code}
-                if flow_data.get("state"):
-                    cb_data["state"] = flow_data["state"]
-                target_redirect = f"{client_redirect_uri}{sep}{_qenc(cb_data)}"
-                logger.info("Redirecting back to MCP client at %s", client_redirect_uri)
+                q = {
+                    "client_id": client_id,
+                    "redirect_uri": client_redirect_uri,
+                    "state": flow_data.get("state", ""),
+                    "code_challenge": flow_data.get("code_challenge", ""),
+                    "code_challenge_method": flow_data.get("code_challenge_method", "S256"),
+                }
+                target_redirect = f"/authorize?{_qenc(q)}"
+                logger.info("Directing logged-in user %s to OAuth consent screen for client %s", discord_username, client_id)
         except Exception as exc:
             logger.warning("Could not process mcp_oauth_flow cookie: %s", exc)
 
@@ -541,6 +537,210 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
     return response
 
 
+async def auth_my_connections(request: Request) -> JSONResponse:
+    """Return list of AI connections for the logged-in user."""
+    session_token = request.cookies.get("modlink_session")
+    if not session_token:
+        return JSONResponse({"error": "Unauthorized", "logged_in": False}, status_code=401)
+
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(UserSession).where(
+                UserSession.id == session_token,
+                UserSession.expires_at > now,
+            )
+        )
+        user_sess = result.scalar_one_or_none()
+        if not user_sess:
+            return JSONResponse({"error": "Unauthorized", "logged_in": False}, status_code=401)
+
+        raw_api_key = decrypt_secret(user_sess.api_key) if user_sess.api_key else ""
+        user_key_hash = _hash_key(raw_api_key) if raw_api_key else ""
+
+        conns_result = await session.execute(
+            select(AIConnection).where(
+                (AIConnection.name.like(f"{user_sess.discord_username}%"))
+                | (AIConnection.api_key_hash == user_key_hash)
+            ).order_by(AIConnection.created_at.desc())
+        )
+        conns = conns_result.scalars().all()
+
+        return JSONResponse({
+            "connections": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "permission_level": c.permission_level.value,
+                    "status": c.status.value,
+                    "autonomous_mode": c.autonomous_mode,
+                    "allowed_guild_ids": c.allowed_guild_ids,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                    "last_seen_at": c.last_seen_at.isoformat() if c.last_seen_at else None,
+                    "expires_at": user_sess.expires_at.isoformat(),
+                }
+                for c in conns
+            ]
+        })
+
+
+async def auth_revoke_my_connection(request: Request) -> JSONResponse:
+    """Revoke a specific connection belonging to the logged-in user."""
+    session_token = request.cookies.get("modlink_session")
+    if not session_token:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    conn_id = request.path_params.get("conn_id")
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(UserSession).where(
+                UserSession.id == session_token,
+                UserSession.expires_at > now,
+            )
+        )
+        user_sess = result.scalar_one_or_none()
+        if not user_sess:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        conn_res = await session.execute(
+            select(AIConnection).where(AIConnection.id == conn_id)
+        )
+        conn = conn_res.scalar_one_or_none()
+        if not conn:
+            return JSONResponse({"error": "Connection not found"}, status_code=404)
+
+        conn.status = ConnectionStatus.revoked
+        raw_api_key = decrypt_secret(user_sess.api_key) if user_sess.api_key else ""
+        if raw_api_key and conn.api_key_hash == _hash_key(raw_api_key):
+            user_sess.api_key = ""
+
+        await session.commit()
+
+    return JSONResponse({"status": "revoked", "id": conn_id})
+
+
+async def auth_update_permission(request: Request) -> JSONResponse:
+    """Update permission level for logged-in user's active connection."""
+    session_token = request.cookies.get("modlink_session")
+    if not session_token:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    perm_str = body.get("permission_level", "read").lower()
+    perm_map = {
+        "read": PermissionLevel.read,
+        "moderate": PermissionLevel.moderate,
+        "manage": PermissionLevel.manage,
+        "admin": PermissionLevel.admin,
+    }
+    target_perm = perm_map.get(perm_str, PermissionLevel.read)
+
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(UserSession).where(
+                UserSession.id == session_token,
+                UserSession.expires_at > now,
+            )
+        )
+        user_sess = result.scalar_one_or_none()
+        if not user_sess:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        raw_api_key = decrypt_secret(user_sess.api_key) if user_sess.api_key else ""
+        user_key_hash = _hash_key(raw_api_key) if raw_api_key else ""
+
+        conns_result = await session.execute(
+            select(AIConnection).where(
+                (AIConnection.name.like(f"{user_sess.discord_username}%"))
+                | (AIConnection.api_key_hash == user_key_hash),
+                AIConnection.status == ConnectionStatus.active,
+            )
+        )
+        active_conns = conns_result.scalars().all()
+        for c in active_conns:
+            c.permission_level = target_perm
+
+        await session.commit()
+
+    return JSONResponse({"status": "updated", "permission_level": target_perm.value})
+
+
+async def auth_guild_settings(request: Request) -> JSONResponse:
+    """Get or update auto-moderation settings and approval rules for a guild."""
+    session_token = request.cookies.get("modlink_session")
+    if not session_token:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    guild_id = request.path_params.get("guild_id")
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(UserSession).where(
+                UserSession.id == session_token,
+                UserSession.expires_at > now,
+            )
+        )
+        user_sess = result.scalar_one_or_none()
+        if not user_sess:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        user_admin_gids = {str(g.get("id")) for g in user_sess.admin_guilds or []}
+        if guild_id not in user_admin_gids:
+            return JSONResponse({"error": "Forbidden: You do not administer this server."}, status_code=403)
+
+        cfg_res = await session.execute(
+            select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+        )
+        cfg = cfg_res.scalar_one_or_none()
+        if not cfg:
+            cfg = GuildConfig(guild_id=guild_id, name="Discord Server")
+            session.add(cfg)
+            await session.commit()
+            await session.refresh(cfg)
+
+        if request.method == "POST":
+            try:
+                data = await request.json()
+            except Exception:
+                data = {}
+
+            allowed_bool_fields = {
+                "automod_enabled", "spam_filter_enabled", "link_filter_enabled",
+                "mention_spam_filter_enabled", "caps_filter_enabled", "word_filter_enabled",
+                "ban_requires_approval", "kick_requires_approval", "delete_message_requires_approval"
+            }
+            for k in allowed_bool_fields:
+                if k in data and isinstance(data[k], bool):
+                    setattr(cfg, k, data[k])
+
+            if "max_timeout_minutes" in data and isinstance(data["max_timeout_minutes"], int):
+                cfg.max_timeout_minutes = max(1, min(data["max_timeout_minutes"], 40320))
+
+            await session.commit()
+            await session.refresh(cfg)
+
+        return JSONResponse({
+            "guild_id": cfg.guild_id,
+            "name": cfg.name,
+            "automod_enabled": cfg.automod_enabled,
+            "spam_filter_enabled": cfg.spam_filter_enabled,
+            "link_filter_enabled": cfg.link_filter_enabled,
+            "mention_spam_filter_enabled": cfg.mention_spam_filter_enabled,
+            "caps_filter_enabled": cfg.caps_filter_enabled,
+            "word_filter_enabled": cfg.word_filter_enabled,
+            "ban_requires_approval": cfg.ban_requires_approval,
+            "kick_requires_approval": cfg.kick_requires_approval,
+            "delete_message_requires_approval": cfg.delete_message_requires_approval,
+            "max_timeout_minutes": cfg.max_timeout_minutes,
+        })
+
+
 portal_routes = [
     Route("/", home, methods=["GET"]),
     Route("/connect", home, methods=["GET"]),
@@ -549,6 +749,10 @@ portal_routes = [
     Route("/terms", terms_page, methods=["GET"]),
     Route("/auth/me", auth_me, methods=["GET"]),
     Route("/auth/rotate-key", auth_rotate_key, methods=["POST"]),
+    Route("/auth/connections", auth_my_connections, methods=["GET"]),
+    Route("/auth/connections/{conn_id}/revoke", auth_revoke_my_connection, methods=["POST"]),
+    Route("/auth/permission", auth_update_permission, methods=["POST"]),
+    Route("/auth/guilds/{guild_id}/settings", auth_guild_settings, methods=["GET", "POST"]),
     Route("/auth/logout", auth_logout, methods=["GET"]),
     Route("/auth/discord/login", discord_login, methods=["GET"]),
     Route("/auth/discord/callback", discord_callback, methods=["GET"]),

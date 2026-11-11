@@ -237,6 +237,15 @@ box.hidden=false;}}
 <p>Do not use ModLink to harass or harm others, violate laws or Discord's policies, access servers you are not authorized to manage, or interfere with the service.</p>
 <h2>AI-generated actions</h2>
 <p>AI assistants can make mistakes. We do not control how an AI interprets instructions and are not responsible for actions it takes on your server. Review audit logs regularly.</p>
+<h2>Availability, restarts and technical behavior</h2>
+<p>We work to maintain high availability for ModLink, but acknowledge the dependencies on external services:</p>
+<ul>
+<li><strong>Service restarts:</strong> All credentials, connection configurations, and audit records persist in durable storage. System updates or restarts do not reset or invalidate your active connections.</li>
+<li><strong>Token lifecycles & expiration:</strong> Web portal session cookies expire after 30 days of inactivity. Authorization codes expire after 10 minutes. API keys remain valid until explicitly rotated or revoked by you.</li>
+<li><strong>External outages:</strong> If Discord APIs or our backend database become temporarily unavailable, ModLink fails closed and refuses moderation requests. Destructive operations will not execute in a disconnected or partially functional state.</li>
+<li><strong>Post-disconnection data:</strong> When a server disconnects or revokes ModLink, audit logs for that server are kept for 30 days for incident reviews before permanent removal.</li>
+</ul>
+
 <h2>Availability and termination</h2>
 <p>We aim to keep ModLink available but do not guarantee uninterrupted service. We may suspend or end access for violations of these terms. You can stop at any time by revoking your connections.</p>
 <h2>Disclaimer and liability</h2>
@@ -244,11 +253,11 @@ box.hidden=false;}}
 <h2>Changes</h2>
 <p>We may update these terms. Continued use after an update means you accept the new terms.</p>
 <h2>Contact</h2>
-<p>Questions? Email <a href="mailto:support@modlink.app">support@modlink.app</a>.</p>
+<p>Questions? Email <a href="mailto:modlink.mcp.baddie@gmail.com">modlink.mcp.baddie@gmail.com</a>.</p>
 </article></div></main>
 <footer class="site"><div class="wrap"><div class="foot">
 <div><a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a><p>A secure gateway that lets your AI assistant moderate your Discord server.</p></div>
 <div><h4>Product</h4><a href="/">Home</a><a href="/dashboard">Dashboard</a></div>
-<div><h4>Legal</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:support@modlink.app">support@modlink.app</a></div>
+<div><h4>Legal</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:modlink.mcp.baddie@gmail.com">modlink.mcp.baddie@gmail.com</a></div>
 </div><p class="legal">&copy; <span data-year>2026</span> ModLink. All rights reserved. ModLink is not affiliated with or endorsed by Discord Inc.</p></div></footer>
 </body></html>

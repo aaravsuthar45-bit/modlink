@@ -32,6 +32,35 @@
 .operator-details summary::-webkit-details-marker { display: none; }
 .operator-details summary:hover { color: var(--ink); }
 .operator-details[open] summary { margin-bottom: var(--s3); color: var(--ink); }
+#help-crumb {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 12px 20px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 rgba(0,0,0,0.3);
+    cursor: pointer;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+#help-crumb:hover { transform: translateY(-2px); box-shadow: 6px 6px 0 rgba(0,0,0,0.35); }
+#help-crumb:focus { outline: 3px solid var(--accent); outline-offset: 2px; }
+.rule-card { border: 2px solid var(--line); padding: var(--s3); background: var(--paper); margin-bottom: var(--s2); display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.rule-card h4 { margin: 0 0 4px 0; font-size: 0.9375rem; }
+.rule-card p { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+.rule-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.rule-toggle input { opacity: 0; width: 0; height: 0; }
+.rule-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--line); transition: .2s; border: 2px solid var(--ink); }
+.rule-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: var(--ink); transition: .2s; }
+.rule-toggle input:checked + .rule-slider { background-color: var(--ok); }
+.rule-toggle input:checked + .rule-slider:before { transform: translateX(20px); background-color: var(--paper); }
 </style>
 </head>
 <body>
@@ -113,11 +142,163 @@
             <i></i><span><strong>Automatic isolation:</strong> Your API key cannot access, view, or modify any Discord server other than the ones verified under your account.</span>
         </div>
     </section>
+
+    <!-- Tutorial Video Section -->
+    <section id="tutorial-panel" class="panel" style="margin-bottom: var(--s5);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s2);">
+            <h2 style="margin:0;">🎬 Video Tutorial: Connecting ModLink to Claude Desktop</h2>
+            <button class="btn btn-outline btn-sm" onclick="toggleTutorial(false)">Hide</button>
+        </div>
+        <p class="section-desc">Follow this quick step-by-step video to connect your AI assistant to your Discord server via MCP.</p>
+        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border:2px solid var(--ink);background:#000;">
+            <iframe id="tutorial-iframe" src="https://www.youtube.com/embed/qyX77HxTreM" title="How to Connect ModLink MCP" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"></iframe>
+        </div>
+    </section>
+
+    <!-- Permission Level Picker -->
+    <section class="panel" style="margin-bottom: var(--s5);">
+        <h2>🛡️ Connection Permission Level</h2>
+        <p class="section-desc">Set the baseline permission level granted to your AI assistant. Read-only is enabled by default to prevent unintended actions.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:var(--s3);margin-bottom:var(--s3);">
+            <label class="perm-card" id="pcard-read" style="border:2px solid var(--ink);padding:var(--s3);cursor:pointer;background:var(--concrete);">
+                <input type="radio" name="perm_level" value="read" checked onchange="setUserPermission('read')">
+                <strong style="display:block;margin:6px 0 2px 0;">Read-Only (Default)</strong>
+                <small style="color:var(--muted);display:block;font-size:0.75rem;">Inspect channels, read messages, query members & audit logs. No mutations allowed.</small>
+            </label>
+            <label class="perm-card" id="pcard-moderate" style="border:2px solid var(--ink);padding:var(--s3);cursor:pointer;background:var(--paper);">
+                <input type="radio" name="perm_level" value="moderate" onchange="setUserPermission('moderate')">
+                <strong style="display:block;margin:6px 0 2px 0;">Moderate</strong>
+                <small style="color:var(--muted);display:block;font-size:0.75rem;">Issue warnings, timeout disruptive users, and clean recent messages.</small>
+            </label>
+            <label class="perm-card" id="pcard-manage" style="border:2px solid var(--ink);padding:var(--s3);cursor:pointer;background:var(--paper);">
+                <input type="radio" name="perm_level" value="manage" onchange="setUserPermission('manage')">
+                <strong style="display:block;margin:6px 0 2px 0;">Manage</strong>
+                <small style="color:var(--muted);display:block;font-size:0.75rem;">Kick members, manage roles, adjust channel slowmode, and lock channels.</small>
+            </label>
+            <label class="perm-card" id="pcard-admin" style="border:2px solid var(--ink);padding:var(--s3);cursor:pointer;background:var(--paper);">
+                <input type="radio" name="perm_level" value="admin" onchange="setUserPermission('admin')">
+                <strong style="display:block;margin:6px 0 2px 0;">Admin</strong>
+                <small style="color:var(--muted);display:block;font-size:0.75rem;">Full administrative access including ban capabilities and server settings.</small>
+            </label>
+        </div>
+        <div id="perm-notify" class="notice ok" style="display:none;margin-top:var(--s2);"><span></span></div>
+    </section>
+
+    <!-- Auto-Moderation Pre-Rules & Approval Settings -->
+    <section class="panel" style="margin-bottom: var(--s5);">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--s2);margin-bottom:var(--s2);">
+            <h2 style="margin:0;">⚙️ Server Safety Rules & Pre-Moderation</h2>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <label for="rules-guild-select" style="font-size:0.875rem;font-weight:700;">Select Server:</label>
+                <select id="rules-guild-select" onchange="loadGuildSettings(this.value)" style="padding:6px 10px;border:2px solid var(--ink);background:var(--paper);font-size:0.875rem;font-family:inherit;"></select>
+            </div>
+        </div>
+        <p class="section-desc">Automated filters are <strong>disabled by default</strong> until explicitly activated. Destructive actions require human operator confirmation by default.</p>
+
+        <h3 style="font-size:1rem;margin:var(--s4) 0 var(--s2) 0;border-bottom:2px solid var(--concrete);padding-bottom:6px;">Automated Pre-Rules (Optional — Off by default)</h3>
+        <div id="automod-rules-list">
+            <div class="rule-card">
+                <div>
+                    <h4>🛡️ Master AutoMod System</h4>
+                    <p>Enable or disable all automated background scanning for this server.</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-automod_enabled" onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+            <div class="rule-card">
+                <div>
+                    <h4>⏱️ Spam & Flood Filter</h4>
+                    <p>Detect rapid repeat messages and message flooding in a sliding window.</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-spam_filter_enabled" onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+            <div class="rule-card">
+                <div>
+                    <h4>🔗 Phishing & Scam Link Filter</h4>
+                    <p>Scan and immediately delete suspicious links matching known phishing heuristics.</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-link_filter_enabled" onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+            <div class="rule-card">
+                <div>
+                    <h4>📢 Mass Mention Guard</h4>
+                    <p>Prevent abuse from mass user and role @mentions.</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-mention_spam_filter_enabled" onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+            <div class="rule-card">
+                <div>
+                    <h4>🔠 Excessive Caps & Word Filter</h4>
+                    <p>Flag messages that violate standard capitalization and prohibited keywords.</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-caps_filter_enabled" onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <h3 style="font-size:1rem;margin:var(--s4) 0 var(--s2) 0;border-bottom:2px solid var(--concrete);padding-bottom:6px;">Human Approval Checkpoints for Destructive Actions</h3>
+        <p class="section-desc">Ensure sensitive actions pause for explicit approval with detailed consequence warnings.</p>
+        <div id="approval-rules-list">
+            <div class="rule-card">
+                <div>
+                    <h4>🔨 Member Ban Approval (Required by default)</h4>
+                    <p><strong>Target:</strong> Guild Member. <strong>Consequence:</strong> Member is permanently expelled and barred from rejoining.</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-ban_requires_approval" checked onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+            <div class="rule-card">
+                <div>
+                    <h4>👢 Member Kick Approval (Required by default)</h4>
+                    <p><strong>Target:</strong> Guild Member. <strong>Consequence:</strong> Member is removed from the server immediately (may rejoin with invite).</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-kick_requires_approval" checked onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+            <div class="rule-card">
+                <div>
+                    <h4>🗑️ Message Deletion Approval</h4>
+                    <p><strong>Target:</strong> Channel Messages. <strong>Consequence:</strong> Messages are permanently deleted from chat history.</p>
+                </div>
+                <label class="rule-toggle">
+                    <input type="checkbox" id="rule-delete_message_requires_approval" onchange="saveCurrentGuildRules()">
+                    <span class="rule-slider"></span>
+                </label>
+            </div>
+        </div>
+        <div id="rules-save-status" class="notice ok" style="display:none;margin-top:var(--s2);"><span>Settings saved.</span></div>
+    </section>
+
+    <!-- Token Management & Active Connections -->
+    <section class="panel" style="margin-bottom: var(--s5);">
+        <h2>🔑 Active Tokens & Connected Clients</h2>
+        <p class="section-desc">Inspect all active API connection tokens issued under your account, monitor when they were last used, and revoke compromised or stale keys.</p>
+        <div id="my-connections-table-container">
+            <div class="empty">Loading your active tokens...</div>
+        </div>
+    </section>
 </div>
 
 <!-- 3. Server Operator / Bot Host Controls (Collapsible) -->
 <details class="operator-details" id="operator-section">
-    <summary>⚙️ Server Host & Operator Mode (DASHBOARD_SECRET)</summary>
+    <summary>Server Host & Operator Mode</summary>
     <div class="panel token">
         <div class="field"><label for="token-field">Dashboard secret token</label><input id="token-field" type="password" autocomplete="off" placeholder="Enter your DASHBOARD_SECRET" />
         <p class="hint">Use the DASHBOARD_SECRET value from your server environment configuration.</p></div>
@@ -136,10 +317,15 @@
 
 </div></main>
 <div id="alert" role="status" aria-live="polite"></div>
+
+<!-- Floating Help Crumb Popup -->
+<div id="help-crumb" role="button" tabindex="0" onclick="toggleTutorial(true)" onkeydown="if(event.key==='Enter'||event.key===' ')toggleTutorial(true)" aria-label="Need help connecting the MCP?">
+    <span style="font-size:1.15em;">💬</span> Need help connecting the MCP?
+</div>
 <footer class="site"><div class="wrap"><div class="foot">
 <div><a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a><p>A secure gateway that lets your AI assistant moderate your Discord server.</p></div>
 <div><h4>Product</h4><a href="/">Home</a><a href="/dashboard">Dashboard</a></div>
-<div><h4>Legal</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:support@modlink.app">support@modlink.app</a></div>
+<div><h4>Legal</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:modlink.mcp.baddie@gmail.com">modlink.mcp.baddie@gmail.com</a></div>
 </div><p class="legal">&copy; <span data-year>2026</span> ModLink. All rights reserved. ModLink is not affiliated with or endorsed by Discord Inc.</p></div></footer>
 
 <script>
@@ -218,7 +404,7 @@ window.initUserDashboard = function(data) {
 
             var statusSpan = document.createElement('span');
             statusSpan.className = g.bot_joined ? 'pill green' : 'pill yellow';
-            statusSpan.textContent = g.bot_joined ? '🟢 ModLink Ready' : '🟡 Bot Not Joined';
+            statusSpan.textContent = g.bot_joined ? 'ModLink Ready' : 'Bot Not Joined';
             actions.appendChild(statusSpan);
 
             if (g.bot_joined) {
@@ -263,6 +449,28 @@ window.initUserDashboard = function(data) {
         }
     }, null, 2);
     document.getElementById('u-claude-json').textContent = claudeJson;
+
+    // Populate guild selector for safety & pre-rules
+    var gSelect = document.getElementById('rules-guild-select');
+    if (gSelect) {
+        gSelect.innerHTML = '';
+        if (guilds && guilds.length) {
+            guilds.forEach(function(g) {
+                var opt = document.createElement('option');
+                opt.value = g.id;
+                opt.textContent = g.name || ('Server ' + g.id);
+                gSelect.appendChild(opt);
+            });
+            loadGuildSettings(guilds[0].id);
+        } else {
+            var opt = document.createElement('option');
+            opt.textContent = 'No admin servers';
+            gSelect.appendChild(opt);
+        }
+    }
+
+    // Load active tokens table
+    loadMyConnections();
 };
 
 // Check session on direct page load if modlink.js hasn't yet
@@ -345,7 +553,145 @@ async function rotateApiKey(btn) {
     }
 }
 
-// Operator Dashboard (DASHBOARD_SECRET) logic
+function toggleTutorial(show) {
+    var p = document.getElementById('tutorial-panel');
+    if (!p) return;
+    if (show === false) {
+        p.style.display = 'none';
+    } else {
+        p.style.display = 'block';
+        p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+async function setUserPermission(level) {
+    var notif = document.getElementById('perm-notify');
+    ['read', 'moderate', 'manage', 'admin'].forEach(function(l) {
+        var card = document.getElementById('pcard-' + l);
+        if (card) card.style.background = (l === level) ? 'var(--concrete)' : 'var(--paper)';
+    });
+    try {
+        var res = await fetch('/auth/permission', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({permission_level: level})
+        });
+        var data = await res.json();
+        if (notif) {
+            notif.style.display = 'block';
+            notif.querySelector('span').textContent = 'Permission level updated to: ' + level.toUpperCase() + ' (Default: Read-only)';
+            setTimeout(function() { notif.style.display = 'none'; }, 3000);
+        }
+        loadMyConnections();
+    } catch (e) {
+        alert('Could not update permission: ' + e.message);
+    }
+}
+
+async function loadMyConnections() {
+    var container = document.getElementById('my-connections-table-container');
+    if (!container) return;
+    try {
+        var res = await fetch('/auth/connections');
+        var data = await res.json();
+        var conns = data.connections || [];
+        if (!conns.length) {
+            container.innerHTML = '<div class="empty">No active connections found.</div>';
+            return;
+        }
+        var html = '<table class="tbl"><thead><tr><th>Name</th><th>Permission</th><th>Created</th><th>Last Used</th><th>Expires</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+        conns.forEach(function(c) {
+            var activeRadio = document.querySelector('input[name="perm_level"][value="' + c.permission_level + '"]');
+            if (activeRadio) {
+                activeRadio.checked = true;
+                ['read', 'moderate', 'manage', 'admin'].forEach(function(l) {
+                    var card = document.getElementById('pcard-' + l);
+                    if (card) card.style.background = (l === c.permission_level) ? 'var(--concrete)' : 'var(--paper)';
+                });
+            }
+            html += '<tr>' +
+                '<td data-label="Name"><strong>' + esc(c.name) + '</strong></td>' +
+                '<td data-label="Permission">' + pill(c.permission_level, permColor(c.permission_level)) + '</td>' +
+                '<td data-label="Created">' + esc(c.created_at ? new Date(c.created_at).toLocaleDateString() : '—') + '</td>' +
+                '<td data-label="Last Used">' + esc(c.last_seen_at ? new Date(c.last_seen_at).toLocaleString() : 'Never') + '</td>' +
+                '<td data-label="Expires">' + esc(c.expires_at ? new Date(c.expires_at).toLocaleDateString() : '30 days') + '</td>' +
+                '<td data-label="Status">' + pill(c.status, c.status === 'active' ? 'green' : 'red') + '</td>' +
+                '<td data-label="Action">' +
+                    (c.status === 'active' ?
+                        '<button class="btn btn-danger btn-sm" onclick="revokeMyConnection(\'' + esc(c.id) + '\')">Revoke</button>' :
+                        '<span style="color:var(--muted);font-size:0.75rem;">Revoked</span>') +
+                '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<div class="empty">Error loading connections: ' + esc(e.message) + '</div>';
+    }
+}
+
+async function revokeMyConnection(connId) {
+    if (!confirm('Revoke this connection token? AI clients using this key will immediately lose access.')) return;
+    try {
+        var res = await fetch('/auth/connections/' + encodeURIComponent(connId) + '/revoke', { method: 'POST' });
+        var data = await res.json();
+        if (data.status === 'revoked') {
+            alert('Connection revoked.');
+            loadMyConnections();
+            document.getElementById('u-api-key').value = '';
+            document.getElementById('u-claude-json').textContent = '// API key revoked. Click "Rotate Key" to generate a new connection.';
+        } else {
+            alert('Failed to revoke: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Network error while revoking: ' + e.message);
+    }
+}
+
+async function loadGuildSettings(guildId) {
+    if (!guildId) return;
+    try {
+        var res = await fetch('/auth/guilds/' + encodeURIComponent(guildId) + '/settings');
+        var cfg = await res.json();
+        if (cfg.error) return;
+        ['automod_enabled', 'spam_filter_enabled', 'link_filter_enabled',
+         'mention_spam_filter_enabled', 'caps_filter_enabled',
+         'ban_requires_approval', 'kick_requires_approval', 'delete_message_requires_approval'].forEach(function(k) {
+            var el = document.getElementById('rule-' + k);
+            if (el) el.checked = Boolean(cfg[k]);
+        });
+    } catch (e) {
+        console.warn('Failed to load guild rules:', e);
+    }
+}
+
+async function saveCurrentGuildRules() {
+    var gSelect = document.getElementById('rules-guild-select');
+    if (!gSelect || !gSelect.value) return;
+    var gid = gSelect.value;
+    var payload = {};
+    ['automod_enabled', 'spam_filter_enabled', 'link_filter_enabled',
+     'mention_spam_filter_enabled', 'caps_filter_enabled',
+     'ban_requires_approval', 'kick_requires_approval', 'delete_message_requires_approval'].forEach(function(k) {
+        var el = document.getElementById('rule-' + k);
+        if (el) payload[k] = el.checked;
+    });
+
+    try {
+        var res = await fetch('/auth/guilds/' + encodeURIComponent(gid) + '/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        var status = document.getElementById('rules-save-status');
+        if (status) {
+            status.style.display = 'block';
+            setTimeout(function() { status.style.display = 'none'; }, 2000);
+        }
+    } catch (e) {
+        alert('Failed to save rules: ' + e.message);
+    }
+}
 document.getElementById('token-field').addEventListener('keydown', function(e) { if (e.key === 'Enter') loadAll(); });
 var token = function() { return document.getElementById('token-field').value.trim(); };
 

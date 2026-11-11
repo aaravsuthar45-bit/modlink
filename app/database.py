@@ -56,9 +56,25 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 async def init_db() -> None:
-    """Create all tables (dev convenience; use Alembic in production)."""
+    """Create all tables and run idempotent schema migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        from sqlalchemy import text
+        # Ensure new columns exist on guild_configs in PostgreSQL / SQLite
+        for col, col_type, def_val in [
+            ("spam_filter_enabled", "BOOLEAN", "FALSE"),
+            ("link_filter_enabled", "BOOLEAN", "FALSE"),
+            ("mention_spam_filter_enabled", "BOOLEAN", "FALSE"),
+            ("caps_filter_enabled", "BOOLEAN", "FALSE"),
+            ("word_filter_enabled", "BOOLEAN", "FALSE"),
+            ("delete_message_requires_approval", "BOOLEAN", "TRUE"),
+        ]:
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS {col} {col_type} DEFAULT {def_val}"
+                ))
+            except Exception:
+                pass
 
 
 # ── Base ─────────────────────────────────────────────────────────────────────
@@ -146,21 +162,40 @@ class GuildConfig(Base):
     guild_id = Column(String(20), primary_key=True)   # Discord snowflake as str
     name = Column(String(100), nullable=False, default="Unknown Guild")
 
-    # AutoMod thresholds
-    automod_enabled = Column(Boolean, nullable=False, default=True)
+    # AutoMod thresholds (optional and disabled by default)
+    automod_enabled = Column(Boolean, nullable=False, default=False)
+    spam_filter_enabled = Column(Boolean, nullable=False, default=False)
+    link_filter_enabled = Column(Boolean, nullable=False, default=False)
+    mention_spam_filter_enabled = Column(Boolean, nullable=False, default=False)
+    caps_filter_enabled = Column(Boolean, nullable=False, default=False)
+    word_filter_enabled = Column(Boolean, nullable=False, default=False)
+
     spam_message_threshold = Column(Integer, nullable=False, default=6)
     spam_window_seconds = Column(Integer, nullable=False, default=12)
 
     # Role IDs exempt from AutoMod (JSON list of str)
     automod_exempt_role_ids: Column = Column(JSON, nullable=False, default=list)
 
-    # Moderation limits for autonomous AI actions
+    # Moderation limits for autonomous AI actions — approval required for destructive actions by default
     max_timeout_minutes = Column(Integer, nullable=False, default=60)
     ban_requires_approval = Column(Boolean, nullable=False, default=True)
-    kick_requires_approval = Column(Boolean, nullable=False, default=False)
+    kick_requires_approval = Column(Boolean, nullable=False, default=True)
+    delete_message_requires_approval = Column(Boolean, nullable=False, default=True)
 
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("automod_enabled", False)
+        kwargs.setdefault("spam_filter_enabled", False)
+        kwargs.setdefault("link_filter_enabled", False)
+        kwargs.setdefault("mention_spam_filter_enabled", False)
+        kwargs.setdefault("caps_filter_enabled", False)
+        kwargs.setdefault("word_filter_enabled", False)
+        kwargs.setdefault("ban_requires_approval", True)
+        kwargs.setdefault("kick_requires_approval", True)
+        kwargs.setdefault("delete_message_requires_approval", True)
+        super().__init__(**kwargs)
 
     def __repr__(self) -> str:
         return f"<GuildConfig guild_id={self.guild_id!r} name={self.name!r}>"

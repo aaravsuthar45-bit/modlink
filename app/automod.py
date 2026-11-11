@@ -105,7 +105,7 @@ async def _check_spam(
     message: discord.Message, config: GuildConfig
 ) -> Optional[AutoModAction]:
     """Flood / rapid-repeat detector using a per-user sliding window."""
-    if not config.automod_enabled:
+    if not config.automod_enabled or not getattr(config, "spam_filter_enabled", False):
         return None
 
     uid = str(message.author.id)
@@ -156,7 +156,7 @@ async def _check_repeated_content(
     message: discord.Message, config: GuildConfig
 ) -> Optional[AutoModAction]:
     """Detect if the user sent the exact same content 3+ times in the window."""
-    if not config.automod_enabled:
+    if not config.automod_enabled or not getattr(config, "spam_filter_enabled", False):
         return None
 
     uid = str(message.author.id)
@@ -178,7 +178,7 @@ async def _check_mention_spam(
     message: discord.Message, config: GuildConfig
 ) -> Optional[AutoModAction]:
     """Detect excessive @mentions in a single message."""
-    if not config.automod_enabled:
+    if not config.automod_enabled or not getattr(config, "mention_spam_filter_enabled", False):
         return None
     total_mentions = len(message.mentions) + len(message.role_mentions)
     if total_mentions > MENTION_LIMIT:
@@ -196,7 +196,7 @@ async def _check_suspicious_links(
     message: discord.Message, config: GuildConfig
 ) -> Optional[AutoModAction]:
     """Detect known phishing / scam link patterns."""
-    if not config.automod_enabled:
+    if not config.automod_enabled or not getattr(config, "link_filter_enabled", False):
         return None
     if SUSPICIOUS_LINK_PATTERN.search(message.content):
         return AutoModAction(

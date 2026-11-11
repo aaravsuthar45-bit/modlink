@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authorize Access — ModLink</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/static/favicon.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/modlink.css">
+<style>
+.consent-wrap { max-width: 520px; margin: var(--s6) auto; padding: 0 var(--s3); }
+.consent-card { background: var(--paper); border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: var(--s5); }
+.consent-header { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); border-bottom: 2px solid var(--concrete); padding-bottom: var(--s3); }
+.consent-app-icon { width: 56px; height: 56px; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; border: 2px solid var(--ink); }
+.consent-header h1 { font-size: 1.35rem; margin: 0 0 2px 0; }
+.consent-header p { font-size: 0.875rem; color: var(--muted); margin: 0; }
+.user-badge { display: flex; align-items: center; gap: var(--s2); background: var(--concrete); padding: 8px 12px; margin-bottom: var(--s4); font-size: 0.875rem; border: 1px solid var(--line); }
+.user-badge img { width: 28px; height: 28px; border-radius: 50%; }
+.perms-box { background: var(--concrete); border: 1px solid var(--line); padding: var(--s3); margin-bottom: var(--s4); }
+.perms-box h3 { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 0 0 var(--s2) 0; }
+.perm-item { display: flex; align-items: flex-start; gap: var(--s2); margin-bottom: 8px; font-size: 0.875rem; }
+.perm-item:last-child { margin-bottom: 0; }
+.perm-check { color: var(--ok); font-weight: 900; }
+.server-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.server-tag { background: var(--paper); border: 1px solid var(--ink); padding: 2px 8px; font-size: 0.75rem; font-weight: 600; }
+.consent-actions { display: flex; gap: var(--s3); margin-top: var(--s4); }
+.consent-actions .btn { flex: 1; text-align: center; justify-content: center; }
+.security-note { font-size: 0.75rem; color: var(--muted); margin-top: var(--s4); text-align: center; line-height: 1.4; }
+</style>
+</head>
+<body>
+<header class="site"><div class="wrap bar">
+<a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a>
+</div></header>
+
+<main class="consent-wrap">
+<div class="consent-card">
+    <div class="consent-header">
+        <div class="consent-app-icon">AI</div>
+        <div>
+            <h1>{client_name}</h1>
+            <p>wants to connect to your ModLink gateway</p>
+        </div>
+    </div>
+
+    <div class="user-badge">
+        <img src="{discord_avatar}" alt="" onerror="this.src='/static/logo.png'">
+        <div>Signed in as <strong>{discord_username}</strong></div>
+    </div>
+
+    <div class="perms-box">
+        <h3>Requested Permissions</h3>
+        <div class="perm-item">
+            <span class="perm-check">✓</span>
+            <div><strong>Access MCP Moderation Gateway</strong><br><small style="color:var(--muted)">Interact with ModLink tools via MCP protocol</small></div>
+        </div>
+        <div class="perm-item">
+            <span class="perm-check">✓</span>
+            <div><strong>Permission Scope: {scope_display}</strong><br><small style="color:var(--muted)">Default access starts at read-only level for safety</small></div>
+        </div>
+        <div class="perm-item">
+            <span class="perm-check">✓</span>
+            <div>
+                <strong>Restricted to Administered Servers ({server_count}):</strong>
+                <div class="server-tags">{server_tags_html}</div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" action="/authorize">
+        <input type="hidden" name="client_id" value="{client_id}">
+        <input type="hidden" name="redirect_uri" value="{redirect_uri}">
+        <input type="hidden" name="state" value="{state}">
+        <input type="hidden" name="code_challenge" value="{code_challenge}">
+        <input type="hidden" name="code_challenge_method" value="{code_challenge_method}">
+        <input type="hidden" name="session_token" value="{session_token}">
+
+        <div class="consent-actions">
+            <button type="submit" name="action" value="deny" class="btn btn-outline" style="border-color:var(--ink);color:var(--ink)">Deny</button>
+            <button type="submit" name="action" value="approve" class="btn btn-primary">Approve</button>
+        </div>
+    </form>
+
+    <p class="security-note">
+        Redirecting to: <code style="font-size:0.75rem;word-break:break-all;">{redirect_uri}</code><br>
+        You can revoke access anytime in your <a href="/dashboard">ModLink Dashboard</a>.
+    </p>
+</div>
+</main>
+
+<footer class="site"><div class="wrap"><div class="foot">
+<div><a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a><p>A secure gateway that lets your AI assistant moderate your Discord server.</p></div>
+<div><h4>Legal</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:modlink.mcp.baddie@gmail.com">modlink.mcp.baddie@gmail.com</a></div>
+</div><p class="legal">&copy; 2026 ModLink. All rights reserved.</p></div></footer>
+</body>
+</html>

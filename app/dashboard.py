@@ -79,11 +79,17 @@ class ConnectionCreate(BaseModel):
 
 class GuildConfigUpdate(BaseModel):
     automod_enabled: Optional[bool] = None
+    spam_filter_enabled: Optional[bool] = None
+    link_filter_enabled: Optional[bool] = None
+    mention_spam_filter_enabled: Optional[bool] = None
+    caps_filter_enabled: Optional[bool] = None
+    word_filter_enabled: Optional[bool] = None
     spam_message_threshold: Optional[int] = None
     spam_window_seconds: Optional[int] = None
     max_timeout_minutes: Optional[int] = None
     ban_requires_approval: Optional[bool] = None
     kick_requires_approval: Optional[bool] = None
+    delete_message_requires_approval: Optional[bool] = None
     automod_exempt_role_ids: Optional[List[str]] = None
 
 

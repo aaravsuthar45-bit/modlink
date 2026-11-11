@@ -72,6 +72,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── Encryption (dedicated secret key) ───────────────────
+    encryption_key: str = Field(
+        "",
+        description=(
+            "Dedicated symmetric encryption key for secrets stored at rest in the database. "
+            "If set, this key is used instead of DASHBOARD_SECRET for encryption. "
+            "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        ),
+    )
+
     # ── Redis (optional) ─────────────────────────────────────
     redis_url: Optional[str] = None
 

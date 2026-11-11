@@ -1,6 +1,12 @@
 """
 app/crypto.py — Symmetric encryption utilities for sensitive secrets stored at rest.
-Uses Fernet (AES-128-CBC + HMAC-SHA256 authenticated encryption) keyed by DASHBOARD_SECRET.
+Uses Fernet (AES-128-CBC + HMAC-SHA256 authenticated encryption).
+
+The encryption key is selected at runtime (in priority order):
+  1. ENCRYPTION_KEY env var — a dedicated AES key for secrets at rest.
+  2. DASHBOARD_SECRET — falls back to this when ENCRYPTION_KEY is not set.
+
+If neither is set, a RuntimeError is raised at encryption time (fail closed).
 """
 from __future__ import annotations
 
@@ -18,7 +24,9 @@ _CIPHER_PREFIX = "enc:"
 
 
 def _get_fernet() -> Fernet:
-    secret = settings.dashboard_secret or "modlink-secret-internal-key-salt-99"
+    secret = settings.encryption_key or settings.dashboard_secret
+    if not secret:
+        raise RuntimeError("ENCRYPTION_KEY or DASHBOARD_SECRET must be set for secret encryption.")
     key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode("utf-8")).digest())
     return Fernet(key)
 
@@ -35,7 +43,7 @@ def encrypt_secret(plain_text: str) -> str:
         return f"{_CIPHER_PREFIX}{ciphertext}"
     except Exception as exc:
         logger.error("Failed to encrypt secret: %s", exc)
-        return plain_text
+        raise RuntimeError(f"Encryption failed: {exc}") from exc
 
 
 def decrypt_secret(stored_text: Optional[str]) -> str:

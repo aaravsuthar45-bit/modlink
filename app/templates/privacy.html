@@ -233,16 +233,35 @@ box.hidden=false;}}
 <p>We use this information to verify that you administer a server, issue and enforce access tokens, carry out the moderation actions you authorize, show you the audit log, and keep the service secure. We do not sell your data.</p>
 <h2>Data shared with AI providers</h2>
 <p>When you connect an AI client such as Claude or ChatGPT, the information returned by moderation tools (for example member lists, messages or audit entries) is sent to that provider under your account. Their handling of that data is governed by their own policies.</p>
-<h2>Retention and deletion</h2>
-<p>We keep data for as long as it is needed to operate the service. You can revoke any connection from the dashboard at any time, and you can ask us to delete your data by contacting us.</p>
+<h2>Data retention periods & lifecycle</h2>
+<ul>
+<li><strong>Audit records:</strong> Retained for 90 days from creation for compliance and dispute review, after which they are automatically pruned.</li>
+<li><strong>Session & login tokens:</strong> Web dashboard sessions expire after 30 days of inactivity. Expired session records are purged within 7 days.</li>
+<li><strong>API keys & connection secrets:</strong> Stored in encrypted form (AES-128-CBC + HMAC-SHA256 authenticated encryption) at rest. When you click "Revoke" or "Rotate Key" in the dashboard, the key is revoked immediately.</li>
+<li><strong>Audit records after server disconnection:</strong> When a server removes the bot or disconnects, audit records for that server are retained for 30 days to facilitate final audits, after which all corresponding logs are permanently purged.</li>
+</ul>
+
+<h2>Account & data deletion steps</h2>
+<p>You have full control over your data:</p>
+<ol>
+<li><strong>Immediate self-service revocation:</strong> Click "Revoke" next to any connection in the ModLink Dashboard, or click "Rotate Key" to immediately invalidate old keys.</li>
+<li><strong>Complete data erasure:</strong> To permanently erase all your account metadata, sessions, and server connection configs, email <a href="mailto:modlink.mcp.baddie@gmail.com">modlink.mcp.baddie@gmail.com</a> with your Discord User ID. All associated data will be deleted within 14 business days.</li>
+</ol>
+
+<h2>Production behavior & service guarantees</h2>
+<ul>
+<li><strong>Service restarts:</strong> All credentials, connection settings, and audit logs are persistently stored in a transactional database. Scheduled or unexpected service restarts do not destroy or reset your tokens; normal operation resumes immediately upon restart.</li>
+<li><strong>Token expiration:</strong> User session cookies expire after 30 days. OAuth authorization codes expire after 10 minutes. API keys remain active until rotated or revoked.</li>
+<li><strong>Discord & database unavailability:</strong> If Discord or our database is unreachable, ModLink fails closed. Moderation tools return explicit service availability errors; no partial or unrecorded destructive actions will ever be performed.</li>
+</ul>
 <h2>Security</h2>
 <p>Access tokens are scoped to the servers you administer, and every action is recorded. No online service can guarantee absolute security, so please keep your tokens private and revoke any you no longer use.</p>
 <h2>Contact</h2>
-<p>Questions about this policy? Email <a href="mailto:support@modlink.app">support@modlink.app</a>.</p>
+<p>Questions about this policy? Email <a href="mailto:modlink.mcp.baddie@gmail.com">modlink.mcp.baddie@gmail.com</a>.</p>
 </article></div></main>
 <footer class="site"><div class="wrap"><div class="foot">
 <div><a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a><p>A secure gateway that lets your AI assistant moderate your Discord server.</p></div>
 <div><h4>Product</h4><a href="/">Home</a><a href="/dashboard">Dashboard</a></div>
-<div><h4>Legal</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:support@modlink.app">support@modlink.app</a></div>
+<div><h4>Legal</h4><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:modlink.mcp.baddie@gmail.com">modlink.mcp.baddie@gmail.com</a></div>
 </div><p class="legal">&copy; <span data-year>2026</span> ModLink. All rights reserved. ModLink is not affiliated with or endorsed by Discord Inc.</p></div></footer>
 </body></html>
