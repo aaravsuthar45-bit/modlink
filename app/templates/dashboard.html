@@ -98,6 +98,7 @@
                 <input id="u-api-key" type="password" readonly value="">
                 <button class="btn btn-outline btn-sm" onclick="toggleKeyVisibility(this)">Show</button>
                 <button class="btn btn-outline btn-sm" onclick="copyInput('u-api-key', this)">Copy</button>
+                <button class="btn btn-secondary btn-sm" id="btn-rotate-key" onclick="rotateApiKey(this)" title="Revoke current key and generate a fresh API key">Rotate Key</button>
             </div>
         </div>
 
@@ -304,6 +305,43 @@ function toggleKeyVisibility(btn) {
     } else {
         el.type = 'password';
         btn.textContent = 'Show';
+    }
+}
+async function rotateApiKey(btn) {
+    if (!confirm('Rotate your API key? The current key will be revoked immediately and any clients using it will need to be updated with the new key.')) return;
+    btn.disabled = true;
+    var oldText = btn.textContent;
+    btn.textContent = 'Rotating…';
+    try {
+        var res = await fetch('/auth/rotate-key', { method: 'POST' });
+        var data = await res.json();
+        if (data.api_key) {
+            document.getElementById('u-api-key').value = data.api_key;
+            var mcpUrl = data.mcp_endpoint || document.getElementById('u-mcp-url').value;
+            var claudeJson = JSON.stringify({
+                "mcpServers": {
+                    "modlink": {
+                        "command": "npx",
+                        "args": [
+                            "-y",
+                            "mcp-remote",
+                            mcpUrl,
+                            "--header",
+                            "x-api-key: " + data.api_key
+                        ]
+                    }
+                }
+            }, null, 2);
+            document.getElementById('u-claude-json').textContent = claudeJson;
+            btn.textContent = 'Rotated!';
+            setTimeout(function() { btn.textContent = oldText; btn.disabled = false; }, 2500);
+        } else {
+            alert('Failed to rotate key: ' + (data.error || data.detail || 'Unknown error'));
+            btn.textContent = oldText; btn.disabled = false;
+        }
+    } catch (e) {
+        alert('Network error while rotating key: ' + e.message);
+        btn.textContent = oldText; btn.disabled = false;
     }
 }
 

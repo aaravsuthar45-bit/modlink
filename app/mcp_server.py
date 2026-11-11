@@ -3532,7 +3532,11 @@ async def _migrate_key_hashes() -> None:
         for us in user_sessions:
             if not us.api_key:
                 continue
-            correct_hash = _sha256(us.api_key)
+            from app.crypto import decrypt_secret
+            raw_key = decrypt_secret(us.api_key)
+            if not raw_key or not raw_key.startswith("ml_live_"):
+                continue
+            correct_hash = _sha256(raw_key)
             conn_name = f"{us.discord_username}\'s AI Connector"
 
             conn_res = await session.execute(
@@ -3725,23 +3729,26 @@ def build_app() -> Starlette:
                 )
                 user_sess = res.scalars().first()
                 if user_sess and user_sess.api_key:
-                    from app.oauth import issue_authorization_code
-                    auth_code = issue_authorization_code(
-                        client_id=client_id,
-                        redirect_uri=redirect_uri,
-                        api_key=user_sess.api_key,
-                        discord_user_id=user_sess.discord_user_id,
-                        discord_username=user_sess.discord_username,
-                        code_challenge=code_challenge,
-                        code_challenge_method=code_challenge_method,
-                    )
-                    from urllib.parse import urlencode as _qenc
-                    sep = "&" if "?" in redirect_uri else "?"
-                    cb_data = {"code": auth_code}
-                    if state:
-                        cb_data["state"] = state
-                    logger.info("Instantly authorized active user %s for MCP client", user_sess.discord_username)
-                    return RedirectResponse(f"{redirect_uri}{sep}{_qenc(cb_data)}", status_code=302)
+                    from app.crypto import decrypt_secret
+                    raw_api_key = decrypt_secret(user_sess.api_key)
+                    if raw_api_key and raw_api_key.startswith("ml_live_"):
+                        from app.oauth import issue_authorization_code
+                        auth_code = issue_authorization_code(
+                            client_id=client_id,
+                            redirect_uri=redirect_uri,
+                            api_key=raw_api_key,
+                            discord_user_id=user_sess.discord_user_id,
+                            discord_username=user_sess.discord_username,
+                            code_challenge=code_challenge,
+                            code_challenge_method=code_challenge_method,
+                        )
+                        from urllib.parse import urlencode as _qenc
+                        sep = "&" if "?" in redirect_uri else "?"
+                        cb_data = {"code": auth_code}
+                        if state:
+                            cb_data["state"] = state
+                        logger.info("Instantly authorized active user %s for MCP client", user_sess.discord_username)
+                        return RedirectResponse(f"{redirect_uri}{sep}{_qenc(cb_data)}", status_code=302)
 
         # 2. User is not yet logged in: store the MCP OAuth request in a cookie and redirect to Discord login
         from app.portal import _get_public_base
@@ -3934,7 +3941,10 @@ def build_app() -> Starlette:
                                 )
                                 u_sess = s_res.scalars().first()
                                 if u_sess and u_sess.api_key:
-                                    raw_token = u_sess.api_key
+                                    from app.crypto import decrypt_secret
+                                    raw_api_key = decrypt_secret(u_sess.api_key)
+                                    if raw_api_key and raw_api_key.startswith("ml_live_"):
+                                        raw_token = raw_api_key
                     except Exception as exc:
                         logger.debug("Could not extract token from cookie: %s", exc)
 
@@ -3954,12 +3964,13 @@ def build_app() -> Starlette:
                     set_current_token(None)
 
                 # Capture session-id emitted in response headers so future requests with that session-id authenticate seamlessly
+                token_to_register = ml_token if raw_token else None
                 async def mcp_send(message):
                     if message["type"] == "http.response.start":
                         for k, v in message.get("headers", []):
                             if k.decode("latin-1").lower() in ("mcp-session-id", "x-mcp-session-id"):
                                 resp_sid = v.decode("latin-1").strip()
-                                active_tok = get_current_token()
+                                active_tok = token_to_register or get_current_token()
                                 if resp_sid and active_tok:
                                     register_session_token(resp_sid, active_tok)
                     await send(message)

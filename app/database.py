@@ -224,9 +224,9 @@ class UserSession(Base):
     """
     Stores authenticated Discord user sessions for web dashboard and cookie persistence.
 
-    Security note: the plaintext API key is never stored here. Only the SHA-256
-    hash is kept so that a database breach cannot expose the raw key. The raw key
-    is returned to the user exactly once (at OAuth token issuance) and not retained.
+    Security note: the API key is symmetrically encrypted at rest (using Fernet
+    AES-128-CBC + HMAC-SHA256 keyed by DASHBOARD_SECRET) and decrypted only
+    for the verified session owner via the web dashboard.
     """
     __tablename__ = "user_sessions"
 
@@ -235,9 +235,7 @@ class UserSession(Base):
     discord_username = Column(String(100), nullable=False)
     avatar_url = Column(String(255), nullable=True)
     admin_guilds = Column(JSON, nullable=False, default=list)  # list of {id, name, icon, bot_joined}
-    # api_key column retained for schema compatibility but must only hold a hash going forward.
-    # New code should use AIConnection.api_key_hash as the authoritative credential.
-    api_key = Column(String(128), nullable=True)  # SHA-256 hash of the API key (NOT plaintext)
+    api_key = Column(String(255), nullable=True)  # Symmetrically encrypted API key (enc:...)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
 

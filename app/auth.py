@@ -44,6 +44,10 @@ class AccessToken:
     autonomous_mode: bool
     scopes: List[str] = field(default_factory=list)
 
+    @property
+    def client_name(self) -> str:
+        return self.name
+
 
 # ── Request authentication context ───────────────────────────────────────────
 

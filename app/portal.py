@@ -26,9 +26,11 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.routing import Route
 from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import _hash_key
 from app.config import settings
+from app.crypto import encrypt_secret, decrypt_secret
 from app.database import (
     AIConnection,
     AsyncSessionLocal,
@@ -170,8 +172,56 @@ async def not_found_page(request: Request, exc: Exception = None) -> HTMLRespons
 
 # ── Auth & Session APIs ───────────────────────────────────────────────────────
 
+async def rotate_user_api_key(user_sess: UserSession, session: AsyncSession) -> str:
+    """Generate a fresh API key for the user, update the AIConnection, and save encrypted in UserSession."""
+    raw_api_key = f"ml_live_{secrets.token_urlsafe(32)}"
+    key_hash = _hash_key(raw_api_key)
+    admin_ids = [str(g.get("id")) for g in (user_sess.admin_guilds or []) if g.get("id")]
+    conn_name = f"{user_sess.discord_username}'s AI Connector"
+
+    conn_res = await session.execute(
+        select(AIConnection).where(
+            AIConnection.name == conn_name,
+            AIConnection.status == ConnectionStatus.active,
+        )
+    )
+    existing_conns = conn_res.scalars().all()
+    if existing_conns:
+        primary = existing_conns[0]
+        primary.api_key_hash = key_hash
+        primary.allowed_guild_ids = admin_ids
+        for dup in existing_conns[1:]:
+            dup.status = ConnectionStatus.revoked
+    else:
+        new_conn = AIConnection(
+            name=conn_name,
+            description=f"Auto-generated OAuth key for Discord user {user_sess.discord_user_id} ({user_sess.discord_username})",
+            api_key_hash=key_hash,
+            allowed_guild_ids=admin_ids,
+            permission_level=PermissionLevel.admin,
+            autonomous_mode=False,
+            status=ConnectionStatus.active,
+        )
+        session.add(new_conn)
+
+    user_sess.api_key = encrypt_secret(raw_api_key)
+    await session.commit()
+    logger.info("Successfully issued & encrypted fresh API key for user %s", user_sess.discord_username)
+    return raw_api_key
+
+
+async def ensure_user_api_key(user_sess: UserSession, session: AsyncSession) -> str:
+    """Return the decrypted raw API key, auto-repairing if missing, corrupt, or previously hashed."""
+    stored = user_sess.api_key or ""
+    plain = decrypt_secret(stored)
+    if plain and plain.startswith("ml_live_"):
+        return plain
+    # Missing or invalid key (e.g. from prior hash-placeholder commit) -> auto-rotate to restore functionality
+    return await rotate_user_api_key(user_sess, session)
+
+
 async def auth_me(request: Request) -> JSONResponse:
-    """Return currently logged-in Discord user details, admin servers, and API key from session cookie."""
+    """Return currently logged-in Discord user details, admin servers, and decrypted API key from session cookie."""
     session_token = request.cookies.get("modlink_session")
     if not session_token:
         return JSONResponse({"logged_in": False})
@@ -186,8 +236,11 @@ async def auth_me(request: Request) -> JSONResponse:
         )
         user_sess = result.scalar_one_or_none()
 
-    if not user_sess:
-        return JSONResponse({"logged_in": False})
+        if not user_sess:
+            return JSONResponse({"logged_in": False})
+
+        # Ensure user has a valid live API key (auto-recovers seamlessly from previous hash/placeholder)
+        raw_api_key = await ensure_user_api_key(user_sess, session)
 
     base = _get_public_base(request)
     mcp_endpoint = f"{base}/mcp"
@@ -216,11 +269,38 @@ async def auth_me(request: Request) -> JSONResponse:
             "avatar": user_sess.avatar_url,
         },
         "admin_guilds": guilds,
-        # api_key is now stored as a hash; return a placeholder so the dashboard
-        # can still display the field. The raw key was shown exactly once at login.
-        "api_key": "••••••••  (key shown once at login — reconnect OAuth to rotate)",
+        "api_key": raw_api_key,
         "mcp_endpoint": mcp_endpoint,
         "bot_invite_url": _get_bot_invite_url(),
+    })
+
+
+async def auth_rotate_key(request: Request) -> JSONResponse:
+    """Rotate the authenticated user's API key: revokes previous key and issues a fresh one."""
+    session_token = request.cookies.get("modlink_session")
+    if not session_token:
+        return JSONResponse({"error": "Unauthorized", "logged_in": False}, status_code=401)
+
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(UserSession).where(
+                UserSession.id == session_token,
+                UserSession.expires_at > now,
+            )
+        )
+        user_sess = result.scalar_one_or_none()
+        if not user_sess:
+            return JSONResponse({"error": "Unauthorized", "logged_in": False}, status_code=401)
+
+        new_raw_key = await rotate_user_api_key(user_sess, session)
+
+    base = _get_public_base(request)
+    return JSONResponse({
+        "status": "success",
+        "message": "API key successfully rotated",
+        "api_key": new_raw_key,
+        "mcp_endpoint": f"{base}/mcp",
     })
 
 
@@ -407,9 +487,8 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
             discord_username=discord_username,
             avatar_url=avatar_url,
             admin_guilds=admin_guilds_data,
-            # SECURITY: Store only the SHA-256 hash — never the raw key.
-            # The raw key is returned to the user exactly once via the OAuth token response.
-            api_key=key_hash,
+            # Encrypted symmetric storage at rest (decrypted exclusively for authenticated user session):
+            api_key=encrypt_secret(raw_api_key),
             expires_at=expires,
         )
         session.add(user_sess)
@@ -469,6 +548,7 @@ portal_routes = [
     Route("/privacy", privacy_page, methods=["GET"]),
     Route("/terms", terms_page, methods=["GET"]),
     Route("/auth/me", auth_me, methods=["GET"]),
+    Route("/auth/rotate-key", auth_rotate_key, methods=["POST"]),
     Route("/auth/logout", auth_logout, methods=["GET"]),
     Route("/auth/discord/login", discord_login, methods=["GET"]),
     Route("/auth/discord/callback", discord_callback, methods=["GET"]),

@@ -16,7 +16,7 @@ from app.auth import PermissionLevel
 from app.config import settings
 from app.database import AuditResult
 from app.discord_bot import bot
-from app.modules.common import audit_log, check_auth
+from app.modules.common import audit_log, check_auth, get_token
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def register_platform_tools(mcp: FastMCP) -> None:
             "bot_user": str(bot.user) if bot.user else None,
             "latency_ms": round(bot.latency * 1000, 2) if bot.latency else None,
             "authenticated": token is not None,
-            "client_name": token.client_name if token else None,
+            "client_name": token.name if token else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
@@ -63,7 +63,7 @@ def register_platform_tools(mcp: FastMCP) -> None:
 
         return json.dumps({
             "connection_id": token.connection_id,
-            "client_name": token.client_name,
+            "client_name": token.name,
             "permission_level": token.permission_level.value,
             "allowed_guild_ids": token.allowed_guild_ids,
         })
@@ -75,7 +75,7 @@ def register_platform_tools(mcp: FastMCP) -> None:
         if err:
             return err
 
-        return json.dumps({"client": token.client_name, "permission_level": token.permission_level.value})
+        return json.dumps({"client": token.name, "permission_level": token.permission_level.value})
 
     @mcp.tool()
     async def list_mcp_clients() -> str:
@@ -84,7 +84,7 @@ def register_platform_tools(mcp: FastMCP) -> None:
         if err:
             return err
 
-        return json.dumps({"current_client": token.client_name, "status": "authorized"})
+        return json.dumps({"current_client": token.name, "status": "authorized"})
 
     @mcp.tool()
     async def get_mcp_session_info() -> str:
