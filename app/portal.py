@@ -216,7 +216,9 @@ async def auth_me(request: Request) -> JSONResponse:
             "avatar": user_sess.avatar_url,
         },
         "admin_guilds": guilds,
-        "api_key": user_sess.api_key,
+        # api_key is now stored as a hash; return a placeholder so the dashboard
+        # can still display the field. The raw key was shown exactly once at login.
+        "api_key": "••••••••  (key shown once at login — reconnect OAuth to rotate)",
         "mcp_endpoint": mcp_endpoint,
         "bot_invite_url": _get_bot_invite_url(),
     })
@@ -405,7 +407,9 @@ async def discord_callback(request: Request) -> RedirectResponse | HTMLResponse:
             discord_username=discord_username,
             avatar_url=avatar_url,
             admin_guilds=admin_guilds_data,
-            api_key=raw_api_key,
+            # SECURITY: Store only the SHA-256 hash — never the raw key.
+            # The raw key is returned to the user exactly once via the OAuth token response.
+            api_key=key_hash,
             expires_at=expires,
         )
         session.add(user_sess)

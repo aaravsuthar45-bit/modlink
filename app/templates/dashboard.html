@@ -161,37 +161,83 @@ window.initUserDashboard = function(data) {
     document.getElementById('u-guild-badge').textContent = guilds.length + ' server' + (guilds.length === 1 ? '' : 's');
 
     // Populate server cards
+    // SECURITY: Never use innerHTML with untrusted data (guild names, IDs, icon URLs) sourced from
+    // Discord — a malicious guild name could inject script that steals the API key shown on the same
+    // page. All user-supplied values are set via textContent or as validated DOM attributes only.
     var sc = document.getElementById('servers-container');
+    sc.innerHTML = '';
     if (!guilds.length) {
-        sc.innerHTML = '<div class="empty">No servers found where you have Administrator or Manage Server permissions.</div>';
+        var emptyDiv = document.createElement('div');
+        emptyDiv.className = 'empty';
+        emptyDiv.textContent = 'No servers found where you have Administrator or Manage Server permissions.';
+        sc.appendChild(emptyDiv);
     } else {
-        sc.innerHTML = guilds.map(function(g) {
-            var iconHtml = g.icon_url 
-                ? '<img class="server-icon" src="' + g.icon_url + '" alt="' + g.name + '">'
-                : '<div class="server-icon">' + (g.name ? g.name.charAt(0).toUpperCase() : '?') + '</div>';
-            
-            var statusHtml = g.bot_joined
-                ? '<span class="pill green">🟢 ModLink Ready</span>'
-                : '<span class="pill yellow">🟡 Bot Not Joined</span>';
+        guilds.forEach(function(g) {
+            var card = document.createElement('div');
+            card.className = 'server-card';
 
-            var actionHtml = g.bot_joined
-                ? '<small style="color:var(--muted)">Active & Protected</small>'
-                : '<a href="' + g.invite_url + '" target="_blank" class="btn btn-primary btn-sm"><i data-i="plus"></i>Invite Bot</a>';
+            var head = document.createElement('div');
+            head.className = 'server-card-head';
 
-            return '<div class="server-card">' +
-                '<div class="server-card-head">' +
-                    iconHtml +
-                    '<div class="server-meta">' +
-                        '<div class="server-title" title="' + g.name + '">' + g.name + '</div>' +
-                        '<span class="server-id">ID: ' + g.id + '</span>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="server-actions">' +
-                    statusHtml +
-                    actionHtml +
-                '</div>' +
-            '</div>';
-        }).join('');
+            if (g.icon_url) {
+                var img = document.createElement('img');
+                img.className = 'server-icon';
+                // Only allow https:// icon URLs to prevent javascript: or data: injection
+                if (typeof g.icon_url === 'string' && g.icon_url.startsWith('https://')) {
+                    img.src = g.icon_url;
+                }
+                img.alt = typeof g.name === 'string' ? g.name : '';
+                head.appendChild(img);
+            } else {
+                var iconDiv = document.createElement('div');
+                iconDiv.className = 'server-icon';
+                iconDiv.textContent = (typeof g.name === 'string' && g.name) ? g.name.charAt(0).toUpperCase() : '?';
+                head.appendChild(iconDiv);
+            }
+
+            var meta = document.createElement('div');
+            meta.className = 'server-meta';
+
+            var titleDiv = document.createElement('div');
+            titleDiv.className = 'server-title';
+            titleDiv.title = typeof g.name === 'string' ? g.name : '';
+            titleDiv.textContent = typeof g.name === 'string' ? g.name : '(unknown)';
+            meta.appendChild(titleDiv);
+
+            var idSpan = document.createElement('span');
+            idSpan.className = 'server-id';
+            idSpan.textContent = 'ID: ' + (typeof g.id === 'string' || typeof g.id === 'number' ? g.id : '');
+            meta.appendChild(idSpan);
+
+            head.appendChild(meta);
+            card.appendChild(head);
+
+            var actions = document.createElement('div');
+            actions.className = 'server-actions';
+
+            var statusSpan = document.createElement('span');
+            statusSpan.className = g.bot_joined ? 'pill green' : 'pill yellow';
+            statusSpan.textContent = g.bot_joined ? '🟢 ModLink Ready' : '🟡 Bot Not Joined';
+            actions.appendChild(statusSpan);
+
+            if (g.bot_joined) {
+                var activeSmall = document.createElement('small');
+                activeSmall.style.color = 'var(--muted)';
+                activeSmall.textContent = 'Active & Protected';
+                actions.appendChild(activeSmall);
+            } else if (typeof g.invite_url === 'string' && g.invite_url.startsWith('https://')) {
+                var inviteLink = document.createElement('a');
+                inviteLink.href = g.invite_url;
+                inviteLink.target = '_blank';
+                inviteLink.rel = 'noopener noreferrer';
+                inviteLink.className = 'btn btn-primary btn-sm';
+                inviteLink.textContent = '+ Invite Bot';
+                actions.appendChild(inviteLink);
+            }
+
+            card.appendChild(actions);
+            sc.appendChild(card);
+        });
         if (window.ML && window.ML.icons) ML.icons(sc);
     }
 

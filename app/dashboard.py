@@ -299,14 +299,16 @@ async def approve_action(
         pa_tool_name = pa.tool_name
         pa_arguments = pa.arguments
 
-    # Execute the approved action
+    # Execute the approved action — if execution fails, revert approval state so the
+    # operator can retry. Approval state must reflect the actual execution result.
+    exec_error: Optional[str] = None
     try:
         import sys
         mcp_mod = sys.modules.get("app.mcp_server")
         if not mcp_mod:
             import app.mcp_server as mcp_mod
 
-        from app.auth import AccessToken
+        from app.auth import AccessToken, set_current_token
         token = AccessToken(
             connection_id=pa_connection_id or "dashboard",
             name="dashboard-approver",
@@ -314,13 +316,29 @@ async def approve_action(
             permission_level=PermissionLevel.admin,
             autonomous_mode=True,
         )
-        mcp_mod.current_ml_token_var.set(token)
+        set_current_token(token)
         handler = getattr(mcp_mod, pa_tool_name, None)
         if callable(handler):
             await handler(**(pa_arguments or {}))
+        else:
+            raise RuntimeError(f"Tool '{pa_tool_name}' is not a callable on the MCP server module.")
     except Exception as exc:
         logger.error("Failed to execute approved action %s: %s", pa_id, exc)
-        return {"status": "approved_but_execution_failed", "error": str(exc)}
+        exec_error = str(exc)
+
+    if exec_error:
+        # Revert the approval record so the operator can retry after fixing the underlying issue.
+        try:
+            async with AsyncSessionLocal() as session:
+                await session.execute(
+                    update(PendingApproval)
+                    .where(PendingApproval.id == pa_id)
+                    .values(approved=None, reviewed_at=None, reviewed_by=None)
+                )
+                await session.commit()
+        except Exception as revert_exc:
+            logger.error("Could not revert approval state for %s: %s", pa_id, revert_exc)
+        return {"status": "execution_failed", "id": pa_id, "error": exec_error}
 
     return {"status": "approved_and_executed", "id": pa_id}
 

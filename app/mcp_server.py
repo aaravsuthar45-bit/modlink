@@ -3665,6 +3665,11 @@ def build_app() -> Starlette:
         """
         OAuth 2.0 Authorization Endpoint (RFC 6749 + RFC 7636).
         Authenticates the user via Discord, then returns an authorization_code to Claude/Cursor.
+
+        Security requirements enforced here:
+        - redirect_uri must be registered for the client (prevents open redirect / code theft).
+        - PKCE with S256 is mandatory for all clients (prevents code interception).
+        - client_id must be provided.
         """
         params = request.query_params
         redirect_uri = params.get("redirect_uri", "")
@@ -3675,6 +3680,35 @@ def build_app() -> Starlette:
 
         if not redirect_uri:
             return RedirectResponse("/?error=missing_redirect_uri", status_code=302)
+
+        if not client_id:
+            return RedirectResponse("/?error=missing_client_id", status_code=302)
+
+        # PKCE S256 is mandatory — reject flows that don't send a code_challenge.
+        if not code_challenge:
+            return RedirectResponse(
+                f"/?error=pkce_required&error_description=PKCE+code_challenge+is+required",
+                status_code=302,
+            )
+        if code_challenge_method.upper() not in ("S256",):
+            return RedirectResponse(
+                f"/?error=invalid_pkce_method&error_description=Only+S256+is+supported",
+                status_code=302,
+            )
+
+        # Validate redirect_uri against the registered client's allowed list.
+        from app.oauth import get_client
+        client_meta = get_client(client_id)
+        if client_meta:
+            allowed_uris = client_meta.get("redirect_uris", [])
+            normalized_req = redirect_uri.rstrip("/")
+            if allowed_uris and not any(u.rstrip("/") == normalized_req for u in allowed_uris):
+                return RedirectResponse(
+                    "/?error=redirect_uri_not_registered",
+                    status_code=302,
+                )
+        # (If the client is not registered via DCR, we allow the request but
+        #  PKCE is already enforced above. Registered clients get strict URI checks.)
 
         # 1. Check if user already has an active ModLink Discord session
         session_token = request.cookies.get("modlink_session")
@@ -3856,7 +3890,10 @@ def build_app() -> Starlette:
                     elif k == "cookie":
                         cookie_str = val.decode("latin-1")
 
-                # 2. Search query parameters if header was not provided (e.g. ?token=... or ?api_key=...)
+                # 2. Search query parameters for MCP session ID only.
+                # NOTE: API keys/tokens are intentionally NOT accepted via query string.
+                # URLs can be logged by proxies, CDNs, and browsers, exposing secrets.
+                # Clients must supply credentials exclusively in Authorization headers.
                 from urllib.parse import parse_qs
                 qs_str = scope.get("query_string", b"").decode("latin-1")
                 if qs_str:
@@ -3866,23 +3903,14 @@ def build_app() -> Starlette:
                             if s_key in params and params[s_key]:
                                 session_id = params[s_key][0].strip()
                                 break
-                    if not raw_token:
-                        for param_key in ("api_key", "token", "key", "apikey", "auth", "x-api-key"):
-                            vals = params.get(param_key)
-                            if vals and vals[0]:
-                                candidate = vals[0].strip("'\" \t\r\n")
-                                if candidate.lower().startswith("bearer "):
-                                    candidate = candidate[7:].strip("'\" \t\r\n")
-                                if candidate and candidate.lower() not in ("null", "undefined", "none"):
-                                    raw_token = candidate
-                                    break
 
                 # 3. If session ID was already authenticated in a previous request, reuse its token
                 if not raw_token and session_id:
-                    from app.auth import _active_sessions
-                    if session_id in _active_sessions:
-                        ml_token = _active_sessions[session_id]
-                        set_current_token(ml_token, session_id=session_id)
+                    from app.auth import get_session_token
+                    session_tok = get_session_token(session_id)
+                    if session_tok:
+                        # Explicitly pin this token to the current request's ContextVar
+                        set_current_token(session_tok, session_id=session_id)
                         await self.inner_app(scope, receive, send)
                         return
 
@@ -3921,11 +3949,9 @@ def build_app() -> Starlette:
                         return
                     set_current_token(ml_token, session_id=session_id)
                 else:
-                    active_fallback = get_current_token()
-                    if active_fallback:
-                        set_current_token(active_fallback, session_id=session_id)
-                    else:
-                        set_current_token(None)
+                    # No token found by any means — explicitly clear context so this request
+                    # cannot inherit a previous request's token (cross-user access prevention).
+                    set_current_token(None)
 
                 # Capture session-id emitted in response headers so future requests with that session-id authenticate seamlessly
                 async def mcp_send(message):

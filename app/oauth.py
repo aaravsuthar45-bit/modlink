@@ -104,6 +104,12 @@ def consume_authorization_code(
     """
     Consume an authorization code (single-use).
     Returns (record, error_message).
+
+    Security enforcement:
+    - client_id must match the one the code was issued for (prevents cross-client code theft).
+    - redirect_uri must match (prevents open redirect attacks).
+    - PKCE code_verifier is required when a code_challenge was stored (prevents code interception).
+    - Plain PKCE method is rejected; only S256 is accepted.
     """
     record = _auth_codes.pop(code, None)
     if not record:
@@ -112,17 +118,38 @@ def consume_authorization_code(
     if record.get("expires_at", 0) < time.time():
         return None, "Authorization code has expired."
 
+    # Enforce client_id binding — the code may only be redeemed by the same client that requested it.
+    issued_client_id = record.get("client_id")
+    if issued_client_id:
+        if not client_id:
+            return None, "client_id is required to redeem this authorization code."
+        if issued_client_id != client_id:
+            logger.warning(
+                "OAuth code redemption client_id mismatch: issued for %r, got %r",
+                issued_client_id, client_id,
+            )
+            return None, "client_id mismatch: this code was not issued for the requesting client."
+
     expected_uri = record.get("redirect_uri")
     if expected_uri and redirect_uri:
         if expected_uri.rstrip("/") != redirect_uri.rstrip("/"):
-            return None, f"Redirect URI mismatch: expected {expected_uri}, got {redirect_uri}"
+            return None, f"Redirect URI mismatch: expected {expected_uri!r}, got {redirect_uri!r}"
 
     expected_challenge = record.get("code_challenge")
     if expected_challenge:
         if not code_verifier:
             return None, "code_verifier is required for PKCE validation."
         method = record.get("code_challenge_method") or "S256"
+        if method.upper() == "PLAIN":
+            # Reject PLAIN — it offers no security benefit and is disallowed.
+            return None, "PKCE method 'plain' is not accepted; use S256."
         if not verify_pkce(code_verifier, expected_challenge, method):
             return None, "PKCE code_verifier verification failed."
+    else:
+        # PKCE was required at the authorization endpoint; a missing challenge
+        # here means the code was issued before the enforcement was added.
+        # Fail closed for safety.
+        if not code_verifier:
+            return None, "code_verifier is required (PKCE is mandatory)."
 
     return record, None

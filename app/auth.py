@@ -49,27 +49,37 @@ class AccessToken:
 
 current_token_var: ContextVar[Optional[AccessToken]] = ContextVar("current_token_var", default=None)
 _active_sessions: Dict[str, AccessToken] = {}
-_latest_token: Optional[AccessToken] = None
+# _latest_token removed: falling back to a process-wide token would let an
+# unauthenticated request inherit another user's identity (cross-user access risk).
 
 
 def set_current_token(token: Optional[AccessToken], session_id: Optional[str] = None) -> None:
     """Set the authenticated token for the current async task and optionally map a session ID."""
     current_token_var.set(token)
-    global _latest_token
-    if token is not None:
-        _latest_token = token
-        if session_id:
-            _active_sessions[str(session_id)] = token
+    if token is not None and session_id:
+        _active_sessions[str(session_id)] = token
 
 
 def get_current_token() -> Optional[AccessToken]:
-    """Retrieve the current authenticated token (from ContextVar, active sessions, or latest)."""
-    tok = current_token_var.get()
-    if tok is not None:
-        return tok
-    if _active_sessions:
-        return list(_active_sessions.values())[-1]
-    return _latest_token
+    """Retrieve the current authenticated token from the per-request ContextVar ONLY.
+
+    SECURITY: This function never falls back to _active_sessions or any
+    process-wide variable. Cross-request token leakage (where an unauthenticated
+    or differently-authenticated request would inherit another user's identity) is
+    prevented by design. Session-ID resumption is handled explicitly in the ASGI
+    middleware via get_session_token() before this is called.
+    """
+    return current_token_var.get()
+
+
+def get_session_token(session_id: str) -> Optional[AccessToken]:
+    """Look up a previously registered MCP session token by its session ID.
+
+    This is the ONLY sanctioned way to access _active_sessions outside this
+    module, and must only be called from the middleware after the session ID
+    has been verified as present in the request headers.
+    """
+    return _active_sessions.get(str(session_id))
 
 
 def register_session_token(session_id: str, token: AccessToken) -> None:
@@ -163,19 +173,10 @@ async def _verify_oidc(raw_token: str) -> Optional[AccessToken]:
 
 async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
     """
-    Look up an API key with a two-path strategy:
+    Look up an API key by its SHA-256 hash in AIConnection.api_key_hash.
 
-    Path 1 — Hash lookup in AIConnection.api_key_hash
-      Computes SHA-256 of the raw token and finds an active AIConnection.
-      Also accepts legacy HMAC hashes and migrates them to SHA-256.
-
-    Path 2 — Exact match in UserSession.api_key
-      If Path 1 misses (e.g. connection was never created or hash migrated),
-      look in the UserSession table for the exact raw key.
-      If found, upsert an AIConnection with the correct SHA-256 hash.
-
-    This ensures auth works immediately after login without depending on
-    DASHBOARD_SECRET or any external secret rotation.
+    Only active connections are accepted; revoked or deleted connections are
+    never resurrected from a UserSession fallback.  Revocation is final.
     """
     cleaned = (raw_token or "").strip("'\" \t\r\n")
     if cleaned.lower().startswith("bearer "):
@@ -188,7 +189,6 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
     sha256_hash = _hash_key(cleaned)
 
     async with AsyncSessionLocal() as session:
-        # ── Path 1: hash-based lookup ────────────────────────────────────────
         result = await session.execute(
             select(AIConnection).where(
                 AIConnection.api_key_hash == sha256_hash,
@@ -207,76 +207,7 @@ async def _verify_api_key(raw_token: str) -> Optional[AccessToken]:
                 scopes=[],
             )
 
-        # ── Path 2: direct UserSession lookup by raw api_key ─────────────────
-        # This catches cases where the AIConnection hash is stale/legacy,
-        # or where the connection was deleted but the session still exists.
-        try:
-            from app.database import UserSession
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
-
-            sess_res = await session.execute(
-                select(UserSession).where(
-                    UserSession.api_key == cleaned,
-                    UserSession.expires_at > now,
-                )
-            )
-            user_sess = sess_res.scalars().first()
-
-            if user_sess:
-                admin_guild_ids = [
-                    str(g.get("id")) for g in (user_sess.admin_guilds or []) if g.get("id")
-                ]
-                # Find or recreate the AIConnection with correct hash
-                conn_res = await session.execute(
-                    select(AIConnection).where(
-                        AIConnection.name == f"{user_sess.discord_username}'s AI Connector",
-                        AIConnection.status == ConnectionStatus.active,
-                    )
-                )
-                conn = conn_res.scalars().first()
-
-                if conn:
-                    # Migrate hash to current SHA-256
-                    conn.api_key_hash = sha256_hash
-                    conn.allowed_guild_ids = admin_guild_ids
-                    await session.commit()
-                    logger.info("Migrated/repaired API key hash for connection: %s", conn.name)
-                    return AccessToken(
-                        connection_id=str(conn.id),
-                        name=conn.name,
-                        allowed_guild_ids=admin_guild_ids,
-                        permission_level=conn.permission_level,
-                        autonomous_mode=conn.autonomous_mode,
-                        scopes=[],
-                    )
-                else:
-                    # Recreate the AIConnection from scratch
-                    new_conn = AIConnection(
-                        name=f"{user_sess.discord_username}'s AI Connector",
-                        description=f"Auto-recovered connector for {user_sess.discord_username}",
-                        api_key_hash=sha256_hash,
-                        allowed_guild_ids=admin_guild_ids,
-                        permission_level=PermissionLevel.admin,
-                        autonomous_mode=False,
-                        status=ConnectionStatus.active,
-                    )
-                    session.add(new_conn)
-                    await session.commit()
-                    logger.info("Recreated AIConnection for user: %s", user_sess.discord_username)
-                    return AccessToken(
-                        connection_id=str(new_conn.id),
-                        name=new_conn.name,
-                        allowed_guild_ids=admin_guild_ids,
-                        permission_level=PermissionLevel.admin,
-                        autonomous_mode=False,
-                        scopes=[],
-                    )
-
-        except Exception as exc:
-            logger.warning("Error during UserSession key fallback: %s", exc)
-
-    logger.debug("API key not found or invalid: %s...", cleaned[:8] if len(cleaned) > 8 else "***")
+    logger.debug("API key not found or connection inactive: %s...", cleaned[:8] if len(cleaned) > 8 else "***")
     return None
 
 
