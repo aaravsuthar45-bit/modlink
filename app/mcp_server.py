@@ -252,7 +252,7 @@ async def get_server_info(guild_id: str) -> str:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_server_info", arguments={"guild_id": guild_id},
                      result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_server_info")
 
 
 @mcp.tool(
@@ -296,7 +296,7 @@ async def read_recent_messages(guild_id: str, channel_id: str, limit: int = 25) 
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="read_recent_messages", arguments=args,
                      result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="read_recent_messages")
 
 
 @mcp.tool(
@@ -354,7 +354,7 @@ async def timeout_member(
                      tool_name="timeout_member", arguments=args,
                      result=AuditResult.error, result_detail=str(exc),
                      target_user_id=user_id)
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="timeout_member")
 
 
 @mcp.tool(
@@ -399,7 +399,7 @@ async def delete_message(
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_message", arguments=args,
                      result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_message")
 
 
 @mcp.tool(
@@ -462,7 +462,7 @@ async def kick_member(
                      tool_name="kick_member", arguments=args,
                      result=AuditResult.error, result_detail=str(exc),
                      target_user_id=user_id)
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="kick_member")
 
 
 @mcp.tool(
@@ -533,7 +533,7 @@ async def ban_member(
                      tool_name="ban_member", arguments=args,
                      result=AuditResult.error, result_detail=str(exc),
                      target_user_id=user_id)
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="ban_member")
 
 
 
@@ -578,7 +578,7 @@ async def get_member_info(guild_id: str, user_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_member_info", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_member_info")
 
 
 @mcp.tool(
@@ -615,7 +615,7 @@ async def list_members(guild_id: str, limit: int = 50) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_members", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_members")
 
 
 @mcp.tool(
@@ -646,7 +646,7 @@ async def add_member_role(guild_id: str, user_id: str, role_id: str, reason: str
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="add_member_role", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="add_member_role")
 
 
 @mcp.tool(
@@ -677,7 +677,7 @@ async def remove_member_role(guild_id: str, user_id: str, role_id: str, reason: 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="remove_member_role", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="remove_member_role")
 
 
 @mcp.tool(
@@ -704,7 +704,7 @@ async def set_member_nickname(guild_id: str, user_id: str, nickname: str, reason
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="set_member_nickname", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="set_member_nickname")
 
 
 @mcp.tool(
@@ -731,7 +731,7 @@ async def unban_member(guild_id: str, user_id: str, reason: str = "Unbanned via 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="unban_member", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="unban_member")
 
 
 @mcp.tool(
@@ -758,7 +758,7 @@ async def remove_timeout(guild_id: str, user_id: str, reason: str = "Timeout rem
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="remove_timeout", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="remove_timeout")
 
 
 @mcp.tool(
@@ -787,7 +787,7 @@ async def move_member_to_voice(guild_id: str, user_id: str, channel_id: str) -> 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="move_member_to_voice", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="move_member_to_voice")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -819,7 +819,7 @@ async def purge_messages(guild_id: str, channel_id: str, limit: int = 10, reason
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="purge_messages", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="purge_messages")
 
 
 @mcp.tool(
@@ -847,7 +847,7 @@ async def purge_user_messages(guild_id: str, channel_id: str, user_id: str, limi
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="purge_user_messages", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="purge_user_messages")
 
 
 @mcp.tool(
@@ -880,7 +880,7 @@ async def get_bans(guild_id: str, limit: int = 50) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_bans", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_bans")
 
 
 @mcp.tool(
@@ -919,7 +919,7 @@ async def get_audit_log(guild_id: str, limit: int = 25, action_type: Optional[in
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_audit_log", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_audit_log")
 
 
 @mcp.tool(
@@ -947,7 +947,7 @@ async def lock_channel(guild_id: str, channel_id: str, reason: str = "Channel lo
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="lock_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="lock_channel")
 
 
 @mcp.tool(
@@ -975,7 +975,7 @@ async def unlock_channel(guild_id: str, channel_id: str, reason: str = "Channel 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="unlock_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="unlock_channel")
 
 
 @mcp.tool(
@@ -1003,7 +1003,7 @@ async def slowmode_channel(guild_id: str, channel_id: str, seconds: int) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="slowmode_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="slowmode_channel")
 
 
 @mcp.tool(
@@ -1048,7 +1048,7 @@ async def warn_member(guild_id: str, user_id: str, reason: str, notify_via_dm: b
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="warn_member", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="warn_member")
 
 
 @mcp.tool(
@@ -1091,7 +1091,7 @@ async def get_warnings(guild_id: str, user_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_warnings", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_warnings")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1134,7 +1134,7 @@ async def list_roles(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_roles", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_roles")
 
 
 @mcp.tool(
@@ -1169,7 +1169,7 @@ async def create_role(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_role", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_role")
 
 
 @mcp.tool(
@@ -1233,7 +1233,6 @@ async def check_role_hierarchy(guild_id: str, role_id: str) -> str:
             "hint": "Role is safe to edit, delete, or assign.",
         }, indent=2)
     except Exception as exc:
-        from app.modules.common import format_discord_error
         return format_discord_error(exc, action_context=f"checking hierarchy for role {role_id}")
 
 
@@ -1265,7 +1264,6 @@ async def delete_role(guild_id: str, role_id: str, reason: str = "Role deleted v
 
         bot_member = guild.me or guild.get_member(bot.user.id)
         if bot_member and bot_member.top_role.position <= role.position and guild.owner_id != bot.user.id:
-            from app.modules.common import make_error
             return make_error(
                 code="bot_role_too_low",
                 message=f"Cannot delete role '{role.name}' (position {role.position}): The bot's top role '{bot_member.top_role.name}' (position {bot_member.top_role.position}) is lower or equal.",
@@ -1284,7 +1282,6 @@ async def delete_role(guild_id: str, role_id: str, reason: str = "Role deleted v
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_role", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        from app.modules.common import format_discord_error
         return format_discord_error(exc, action_context=f"deleting role {role_id}")
 
 
@@ -1324,7 +1321,6 @@ async def edit_role(
 
         bot_member = guild.me or guild.get_member(bot.user.id)
         if bot_member and bot_member.top_role.position <= role.position and guild.owner_id != bot.user.id:
-            from app.modules.common import make_error
             return make_error(
                 code="bot_role_too_low",
                 message=f"Cannot edit role '{role.name}' (position {role.position}): The bot's top role '{bot_member.top_role.name}' (position {bot_member.top_role.position}) is lower or equal.",
@@ -1351,7 +1347,6 @@ async def edit_role(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_role", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        from app.modules.common import format_discord_error
         return format_discord_error(exc, action_context=f"editing role {role_id}")
 
 
@@ -1382,7 +1377,7 @@ async def get_role_members(guild_id: str, role_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_role_members", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_role_members")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1426,7 +1421,7 @@ async def list_channels(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_channels", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_channels")
 
 
 @mcp.tool(
@@ -1460,7 +1455,7 @@ async def create_text_channel(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_text_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_text_channel")
 
 
 @mcp.tool(
@@ -1491,7 +1486,7 @@ async def delete_channel(guild_id: str, channel_id: str, reason: str = "Channel 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_channel")
 
 
 @mcp.tool(
@@ -1561,7 +1556,6 @@ async def edit_channel(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        from app.modules.common import format_discord_error
         return format_discord_error(exc, action_context=f"editing channel {channel_id}")
 
 
@@ -1593,7 +1587,7 @@ async def send_message(guild_id: str, channel_id: str, content: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="send_message", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="send_message")
 
 
 @mcp.tool(
@@ -1634,7 +1628,7 @@ async def send_embed(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="send_embed", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="send_embed")
 
 
 @mcp.tool(
@@ -1661,7 +1655,7 @@ async def send_dm(guild_id: str, user_id: str, content: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="send_dm", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="send_dm")
 
 
 @mcp.tool(
@@ -1689,7 +1683,7 @@ async def pin_message(guild_id: str, channel_id: str, message_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="pin_message", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="pin_message")
 
 
 @mcp.tool(
@@ -1717,7 +1711,7 @@ async def add_reaction(guild_id: str, channel_id: str, message_id: str, emoji: s
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="add_reaction", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="add_reaction")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1763,7 +1757,7 @@ async def get_server_statistics(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_server_statistics", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_server_statistics")
 
 
 @mcp.tool(
@@ -1794,7 +1788,7 @@ async def get_server_emojis(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_server_emojis", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_server_emojis")
 
 
 @mcp.tool(
@@ -1833,7 +1827,7 @@ async def get_server_invites(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_server_invites", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_server_invites")
 
 
 @mcp.tool(
@@ -1867,7 +1861,7 @@ async def create_invite(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_invite", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_invite")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1911,7 +1905,7 @@ async def list_voice_channels(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_voice_channels", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_voice_channels")
 
 
 @mcp.tool(
@@ -1940,7 +1934,7 @@ async def disconnect_from_voice(guild_id: str, user_id: str, reason: str = "Disc
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="disconnect_from_voice", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="disconnect_from_voice")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1976,7 +1970,7 @@ async def get_bot_status() -> str:
                      tool_name="get_bot_status", arguments={}, result=AuditResult.success)
         return json.dumps(data, indent=2)
     except Exception as exc:
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_bot_status")
 
 
 @mcp.tool(
@@ -2038,7 +2032,7 @@ async def analyze_server(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="analyze_server", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="analyze_server")
 
 
 @mcp.tool(
@@ -2079,7 +2073,7 @@ async def find_inactive_members(guild_id: str, min_days_since_join: int = 30) ->
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="find_inactive_members", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="find_inactive_members")
 
 
 @mcp.tool(
@@ -2123,7 +2117,7 @@ async def get_action_history(guild_id: str, limit: int = 50) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_action_history", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_action_history")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2171,7 +2165,7 @@ async def list_threads(guild_id: str, channel_id: Optional[str] = None) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_threads", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_threads")
 
 
 @mcp.tool(
@@ -2219,7 +2213,7 @@ async def get_thread(guild_id: str, thread_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_thread", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_thread")
 
 
 @mcp.tool(
@@ -2258,7 +2252,7 @@ async def create_thread(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_thread", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_thread")
 
 
 @mcp.tool(
@@ -2288,7 +2282,7 @@ async def archive_thread(guild_id: str, thread_id: str, locked: bool = False, re
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="archive_thread", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="archive_thread")
 
 
 @mcp.tool(
@@ -2318,7 +2312,7 @@ async def unarchive_thread(guild_id: str, thread_id: str, reason: str = "Unarchi
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="unarchive_thread", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="unarchive_thread")
 
 
 @mcp.tool(
@@ -2349,7 +2343,7 @@ async def delete_thread(guild_id: str, thread_id: str, reason: str = "Thread del
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_thread", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_thread")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2393,7 +2387,7 @@ async def get_message(guild_id: str, channel_id: str, message_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_message", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_message")
 
 
 @mcp.tool(
@@ -2431,7 +2425,7 @@ async def search_messages(guild_id: str, channel_id: str, query: str, limit: int
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="search_messages", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="search_messages")
 
 
 @mcp.tool(
@@ -2459,7 +2453,7 @@ async def unpin_message(guild_id: str, channel_id: str, message_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="unpin_message", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="unpin_message")
 
 
 @mcp.tool(
@@ -2497,7 +2491,7 @@ async def remove_reaction(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="remove_reaction", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="remove_reaction")
 
 
 @mcp.tool(
@@ -2525,7 +2519,7 @@ async def clear_reactions(guild_id: str, channel_id: str, message_id: str) -> st
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="clear_reactions", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="clear_reactions")
 
 
 @mcp.tool(
@@ -2553,7 +2547,7 @@ async def reply_to_message(guild_id: str, channel_id: str, message_id: str, cont
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="reply_to_message", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="reply_to_message")
 
 
 @mcp.tool(
@@ -2581,7 +2575,7 @@ async def crosspost_message(guild_id: str, channel_id: str, message_id: str) -> 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="crosspost_message", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="crosspost_message")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2613,7 +2607,7 @@ async def edit_server_name(guild_id: str, name: str, reason: str = "Renamed via 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_server_name", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="edit_server_name")
 
 
 @mcp.tool(
@@ -2640,7 +2634,7 @@ async def edit_server_description(guild_id: str, description: str, reason: str =
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="edit_server_description", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="edit_server_description")
 
 
 @mcp.tool(
@@ -2675,7 +2669,7 @@ async def delete_invite(guild_id: str, code: str, reason: str = "Revoked via Mod
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_invite", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_invite")
 
 
 @mcp.tool(
@@ -2708,7 +2702,7 @@ async def create_emoji(guild_id: str, name: str, image_url: str, reason: str = "
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_emoji", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_emoji")
 
 
 @mcp.tool(
@@ -2739,7 +2733,7 @@ async def delete_emoji(guild_id: str, emoji_id: str, reason: str = "Emoji delete
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_emoji", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_emoji")
 
 
 @mcp.tool(
@@ -2776,7 +2770,7 @@ async def list_stickers(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_stickers", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_stickers")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2818,7 +2812,7 @@ async def get_automod_rules(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_automod_rules", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_automod_rules")
 
 
 @mcp.tool(
@@ -2872,7 +2866,7 @@ async def create_automod_keyword_rule(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_automod_keyword_rule", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_automod_keyword_rule")
 
 
 @mcp.tool(
@@ -2901,7 +2895,7 @@ async def delete_automod_rule(guild_id: str, rule_id: str, reason: str = "Delete
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_automod_rule", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_automod_rule")
 
 
 @mcp.tool(
@@ -2934,7 +2928,7 @@ async def enable_emergency_lockdown(guild_id: str, reason: str = "Emergency lock
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="enable_emergency_lockdown", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="enable_emergency_lockdown")
 
 
 @mcp.tool(
@@ -2967,7 +2961,7 @@ async def disable_emergency_lockdown(guild_id: str, reason: str = "Emergency loc
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="disable_emergency_lockdown", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="disable_emergency_lockdown")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3011,7 +3005,7 @@ async def list_events(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_events", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_events")
 
 
 @mcp.tool(
@@ -3071,7 +3065,7 @@ async def create_scheduled_event(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_scheduled_event", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_scheduled_event")
 
 
 @mcp.tool(
@@ -3100,7 +3094,7 @@ async def delete_scheduled_event(guild_id: str, event_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_scheduled_event", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_scheduled_event")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3144,7 +3138,7 @@ async def list_webhooks(guild_id: str, channel_id: Optional[str] = None) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_webhooks", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="list_webhooks")
 
 
 @mcp.tool(
@@ -3172,7 +3166,7 @@ async def create_webhook(guild_id: str, channel_id: str, name: str, reason: str 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="create_webhook", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="create_webhook")
 
 
 @mcp.tool(
@@ -3200,7 +3194,7 @@ async def delete_webhook(guild_id: str, webhook_id: str, reason: str = "Webhook 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="delete_webhook", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="delete_webhook")
 
 
 @mcp.tool(
@@ -3233,7 +3227,7 @@ async def send_webhook_message(
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="send_webhook_message", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="send_webhook_message")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3281,7 +3275,7 @@ async def get_server_overview(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_server_overview", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_server_overview")
 
 
 @mcp.tool(
@@ -3331,7 +3325,7 @@ async def get_bot_permissions(guild_id: str, channel_id: Optional[str] = None) -
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="get_bot_permissions", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="get_bot_permissions")
 
 
 @mcp.tool(
@@ -3375,7 +3369,7 @@ async def summarize_channel(guild_id: str, channel_id: str, limit: int = 50) -> 
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="summarize_channel", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="summarize_channel")
 
 
 @mcp.tool(
@@ -3449,7 +3443,7 @@ async def recommend_server_improvements(guild_id: str) -> str:
     except Exception as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="recommend_server_improvements", arguments=args, result=AuditResult.error, result_detail=str(exc))
-        return json.dumps({"error": str(exc)})
+        return format_discord_error(exc, action_context="recommend_server_improvements")
 
 
 # ── Register custom tools dynamically ─────────────────────────────────────────
@@ -3491,7 +3485,7 @@ def _register_custom_tools() -> None:
                     await _audit(connection_id=token.connection_id, guild_id=guild_id,
                                  tool_name=custom_tool_def.name, arguments=kwargs,
                                  result=AuditResult.error, result_detail=str(exc))
-                    return json.dumps({"error": str(exc)})
+                    return format_discord_error(exc, action_context="recommend_server_improvements")
             _wrapper.__name__ = custom_tool_def.name
             return _wrapper
 
