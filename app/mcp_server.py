@@ -718,31 +718,94 @@ async def get_member_info(guild_id: str, user_id: str) -> str:
 
 @mcp.tool(
     name="list_members",
-    description="List members of a guild. limit: max members to return (default 50, max 100).",
+    description=(
+        "List members of a Discord guild (up to 50 members). "
+        "query: optional keyword to find a member by username, display name, nickname, or user ID. "
+        "limit: number of members to return (default 50, maximum 50)."
+    ),
 )
-async def list_members(guild_id: str, limit: int = 50) -> str:
+async def list_members(guild_id: str, query: str = "", limit: int = 50) -> str:
     token = _get_ml_token()
     if token is None:
         return json.dumps({"error": "Unauthenticated"})
-    args = {"guild_id": guild_id, "limit": limit}
+    args = {"guild_id": guild_id, "query": query, "limit": limit}
     try:
         _require_guild_access(token, guild_id)
         _require_permission(token, PermissionLevel.read)
         guild = await get_guild(guild_id)
-        limit = max(1, min(limit, 100))
+        limit = max(1, min(limit, 50))
+
+        matched_members = []
+        q = (query or "").strip().lower()
+
+        if q:
+            # 1. Gateway query_members search
+            try:
+                results = await guild.query_members(query=q, limit=limit)
+                matched_members.extend(results)
+            except Exception as _q_err:
+                logger.debug("guild.query_members failed, checking cache/fetch: %s", _q_err)
+
+            # 2. Check cached guild members if query_members didn't return enough
+            if len(matched_members) < limit and getattr(guild, "members", None):
+                seen_ids = {m.id for m in matched_members}
+                for m in guild.members:
+                    if m.id not in seen_ids:
+                        name_str = m.name.lower()
+                        disp_str = m.display_name.lower()
+                        nick_str = (m.nick or "").lower()
+                        id_str = str(m.id)
+                        if q in id_str or q in name_str or q in disp_str or q in nick_str:
+                            matched_members.append(m)
+                            seen_ids.add(m.id)
+                            if len(matched_members) >= limit:
+                                break
+
+            # 3. Fallback: async fetch_members chunk if still needed
+            if len(matched_members) < limit:
+                seen_ids = {m.id for m in matched_members}
+                try:
+                    async for m in guild.fetch_members(limit=min(200, limit * 5)):
+                        if m.id not in seen_ids:
+                            name_str = m.name.lower()
+                            disp_str = m.display_name.lower()
+                            nick_str = (m.nick or "").lower()
+                            id_str = str(m.id)
+                            if q in id_str or q in name_str or q in disp_str or q in nick_str:
+                                matched_members.append(m)
+                                seen_ids.add(m.id)
+                                if len(matched_members) >= limit:
+                                    break
+                except Exception as _fetch_err:
+                    logger.debug("fetch_members fallback error: %s", _fetch_err)
+        else:
+            async for member in guild.fetch_members(limit=limit):
+                matched_members.append(member)
+                if len(matched_members) >= limit:
+                    break
+
         members = []
-        async for member in guild.fetch_members(limit=limit):
+        for member in matched_members[:limit]:
             members.append({
                 "user_id": str(member.id),
                 "username": str(member),
                 "display_name": member.display_name,
+                "nickname": member.nick,
                 "bot": member.bot,
                 "joined_at": member.joined_at.isoformat() if member.joined_at else None,
                 "top_role": str(member.top_role),
             })
+
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_members", arguments=args, result=AuditResult.success)
-        return json.dumps({"guild_id": guild_id, "members": members, "returned": len(members)}, indent=2)
+        return json.dumps({
+            "guild_id": guild_id,
+            "query": query,
+            "members": members,
+            "returned": len(members),
+            "limit": limit,
+            "note": "Only up to 50 members are returned per request. Use the 'query' parameter or the 'search_members' tool to find specific users by keyword."
+        }, indent=2)
     except PermissionError as exc:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_members", arguments=args, result=AuditResult.denied, result_detail=str(exc))
@@ -751,6 +814,20 @@ async def list_members(guild_id: str, limit: int = 50) -> str:
         await _audit(connection_id=token.connection_id, guild_id=guild_id,
                      tool_name="list_members", arguments=args, result=AuditResult.error, result_detail=str(exc))
         return format_discord_error(exc, action_context="list_members")
+
+
+@mcp.tool(
+    name="search_members",
+    description=(
+        "Search for members in a Discord server by keyword. "
+        "Matches against username, display name, nickname, or Discord user ID. "
+        "Returns up to 50 matching members. Use this tool when you need to find a specific user "
+        "without paging through the entire server membership."
+    ),
+)
+async def search_members(guild_id: str, query: str, limit: int = 50) -> str:
+    """Search for members by keyword (username, nickname, or ID) in a guild."""
+    return await list_members(guild_id=guild_id, query=query, limit=limit)
 
 
 @mcp.tool(
