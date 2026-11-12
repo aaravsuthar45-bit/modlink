@@ -13,23 +13,27 @@
 <script src="/static/modlink.js" defer></script>
 <style>
 .consent-wrap { max-width: 520px; margin: var(--s6) auto; padding: 0 var(--s3); }
-.consent-card { background: var(--paper); border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: var(--s5); }
+.consent-card { background: var(--paper); border: 2px solid var(--ink); border-radius: var(--radius-md); box-shadow: 4px 4px 0 var(--ink); padding: var(--s5); transition: var(--transition); }
 .consent-header { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); border-bottom: 2px solid var(--concrete); padding-bottom: var(--s3); }
-.consent-app-icon { width: 56px; height: 56px; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; border: 2px solid var(--ink); }
+.consent-app-icon { width: 56px; height: 56px; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; border: 2px solid var(--ink); border-radius: var(--radius); }
 .consent-header h1 { font-size: 1.35rem; margin: 0 0 2px 0; }
 .consent-header p { font-size: 0.875rem; color: var(--muted); margin: 0; }
-.user-badge { display: flex; align-items: center; gap: var(--s2); background: var(--concrete); padding: 8px 12px; margin-bottom: var(--s4); font-size: 0.875rem; border: 1px solid var(--line); }
+.user-badge { display: flex; align-items: center; gap: var(--s2); background: var(--concrete); padding: 8px 12px; margin-bottom: var(--s4); font-size: 0.875rem; border: 1px solid var(--line); border-radius: var(--radius); }
 .user-badge img { width: 28px; height: 28px; border-radius: 50%; }
-.perms-box { background: var(--concrete); border: 1px solid var(--line); padding: var(--s3); margin-bottom: var(--s4); }
+.perms-box { background: var(--concrete); border: 1px solid var(--line); padding: var(--s3); margin-bottom: var(--s4); border-radius: var(--radius); }
 .perms-box h3 { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin: 0 0 var(--s2) 0; }
 .perm-item { display: flex; align-items: flex-start; gap: var(--s2); margin-bottom: 8px; font-size: 0.875rem; }
 .perm-item:last-child { margin-bottom: 0; }
 .perm-check { color: var(--ok); font-weight: 900; }
 .server-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.server-tag { background: var(--paper); border: 1px solid var(--ink); padding: 2px 8px; font-size: 0.75rem; font-weight: 600; }
+.server-tag { background: var(--paper); border: 1px solid var(--ink); padding: 2px 8px; font-size: 0.75rem; font-weight: 600; border-radius: var(--radius-sm); }
 .consent-actions { display: flex; gap: var(--s3); margin-top: var(--s4); }
 .consent-actions .btn { flex: 1; text-align: center; justify-content: center; }
 .security-note { font-size: 0.75rem; color: var(--muted); margin-top: var(--s4); text-align: center; line-height: 1.4; }
+:root[data-theme="dark"] .consent-card { background: var(--concrete); border-color: var(--line); box-shadow: 4px 4px 0 rgba(0,0,0,0.5); }
+:root[data-theme="dark"] .consent-app-icon { background: var(--paper); color: var(--ink); border-color: var(--line); }
+:root[data-theme="dark"] .perms-box, :root[data-theme="dark"] .user-badge { background: var(--paper); border-color: var(--line); }
+:root[data-theme="dark"] .server-tag { background: var(--concrete); border-color: var(--line); color: var(--ink); }
 </style>
 </head>
 <body>

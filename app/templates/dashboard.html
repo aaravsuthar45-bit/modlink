@@ -18,17 +18,17 @@
 <script src="/static/modlink.js" defer></script>
 <style>
 .section-desc { color: var(--muted); font-size: 0.9375rem; margin-bottom: var(--s3); }
-.login-callout { background: var(--concrete); border: 2px solid var(--ink); padding: var(--s6) var(--s4); text-align: center; margin-bottom: var(--s5); }
+.login-callout { background: var(--concrete); border: 2px solid var(--ink); border-radius: var(--radius-md); padding: var(--s6) var(--s4); text-align: center; margin-bottom: var(--s5); box-shadow: 4px 4px 0 var(--line); }
 .login-callout h2 { font-size: 1.75rem; font-weight: 900; margin-bottom: var(--s2); }
 .login-callout p { color: var(--body); max-width: 440px; margin: 0 auto var(--s4); font-size: 1rem; }
-.server-card { transition: transform 0.15s, border-color 0.15s; }
+.server-card { transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s; border-radius: var(--radius-md); }
 .server-card:hover { transform: translateY(-2px); }
 .server-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .copy-group { margin-bottom: var(--s4); }
 .copy-label { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 6px; display: block; }
 .copy-box { display: flex; gap: var(--s2); align-items: center; }
-.copy-box input { flex: 1; min-height: 44px; padding: 0 var(--s3); border: 2px solid var(--ink); background: var(--concrete); font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; color: var(--ink); }
-.copy-pre { background: var(--concrete); border: 2px solid var(--ink); padding: var(--s3); font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; white-space: pre-wrap; word-break: break-all; margin-bottom: var(--s2); max-height: 220px; overflow-y: auto; }
+.copy-box input { flex: 1; min-height: 44px; padding: 0 var(--s3); border: 2px solid var(--ink); border-radius: var(--radius); background: var(--concrete); font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; color: var(--ink); }
+.copy-pre { background: var(--concrete); border: 2px solid var(--ink); border-radius: var(--radius); padding: var(--s3); font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; white-space: pre-wrap; word-break: break-all; margin-bottom: var(--s2); max-height: 220px; overflow-y: auto; }
 .operator-details summary { cursor: pointer; font-weight: 700; color: var(--muted); font-size: 0.875rem; padding: var(--s3) 0; list-style: none; }
 .operator-details summary::-webkit-details-marker { display: none; }
 .operator-details summary:hover { color: var(--ink); }
@@ -39,10 +39,11 @@
     right: 24px;
     background: var(--ink);
     color: var(--paper);
-    padding: 12px 20px;
+    padding: 10px 16px;
     font-size: 0.875rem;
     font-weight: 700;
     border: 2px solid var(--ink);
+    border-radius: var(--radius-md);
     box-shadow: 4px 4px 0 rgba(0,0,0,0.3);
     cursor: pointer;
     z-index: 9999;
@@ -52,18 +53,23 @@
     transition: transform 0.15s, box-shadow 0.15s;
 }
 #help-crumb:hover { transform: translateY(-2px); box-shadow: 6px 6px 0 rgba(0,0,0,0.35); }
-#help-crumb:focus { outline: 3px solid var(--accent); outline-offset: 2px; }
-.rule-card { border: 2px solid var(--line); padding: var(--s3); background: var(--paper); margin-bottom: var(--s2); display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+#help-crumb:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rule-card { border: 2px solid var(--line); border-radius: var(--radius); padding: var(--s3); background: var(--paper); margin-bottom: var(--s2); display: flex; align-items: center; justify-content: space-between; gap: var(--s3); transition: border-color .15s ease, background-color .15s ease; }
+.rule-card:hover { border-color: var(--ink); }
 .rule-card h4 { margin: 0 0 4px 0; font-size: 0.9375rem; }
 .rule-card p { margin: 0; font-size: 0.8125rem; color: var(--muted); }
 .rule-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
 .rule-toggle input { opacity: 0; width: 0; height: 0; }
-.rule-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--line); transition: .2s; border: 2px solid var(--ink); }
-.rule-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: var(--ink); transition: .2s; }
+.rule-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--line); transition: .2s; border: 2px solid var(--ink); border-radius: 20px; }
+.rule-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: var(--ink); transition: .2s; border-radius: 50%; }
 .rule-toggle input:checked + .rule-slider { background-color: var(--ok); }
 .rule-toggle input:checked + .rule-slider:before { transform: translateX(20px); background-color: var(--paper); }
+.perm-card { border: 2px solid var(--line); border-radius: var(--radius); padding: var(--s3); cursor: pointer; background: var(--paper); transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.perm-card:hover { transform: translateY(-2px); border-color: var(--ink); box-shadow: 3px 3px 0 var(--line); }
 .h-icon { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; flex-shrink: 0; }
 .h-icon svg { display: block; fill: currentColor; }
+.video-wrapper { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border: 2px solid var(--ink); border-radius: var(--radius-md); box-shadow: 4px 4px 0 var(--line); background: #000; }
+.video-wrapper iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 </style>
 </head>
 <body>
@@ -150,8 +156,8 @@
             <button class="btn btn-outline btn-sm" onclick="toggleTutorial(false)">Hide</button>
         </div>
         <p class="section-desc">Follow this quick step-by-step video to connect your AI assistant to your Discord server via MCP.</p>
-        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border:2px solid var(--ink);background:#000;">
-            <iframe id="tutorial-iframe" src="https://www.youtube.com/embed/qyX77HxTreM" title="How to Connect ModLink MCP" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"></iframe>
+        <div class="video-wrapper">
+            <iframe id="tutorial-iframe" src="https://www.youtube.com/embed/qyX77HxTreM" title="How to Connect ModLink MCP" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
         </div>
     </section>
 
@@ -319,8 +325,12 @@
 <div id="alert" role="status" aria-live="polite"></div>
 
 <!-- Floating Help Crumb Popup -->
-<div id="help-crumb" role="button" tabindex="0" onclick="toggleTutorial(true)" onkeydown="if(event.key==='Enter'||event.key===' ')toggleTutorial(true)" aria-label="Need help connecting the MCP?">
-    <span class="h-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="18px" width="18px" fill="currentColor"><path d="M12.84,17.64q0.36-0.36 0.36-0.89t-0.36-0.89T11.95,15.5t-0.89,0.36q-0.36,0.36-0.36,0.89t0.36,0.89T11.95,18t0.89-0.36Zm-1.79-3.49H12.9q0-0.82 0.19-1.3t1.06-1.3q0.65-0.65 1.03-1.24T15.55,8.9q0-1.4-1.03-2.15T12.1,6Q10.68,6 9.79,6.75T8.55,8.55L10.2,9.2q0.13-0.45 0.56-0.97T12.1,7.7q0.8,0 1.2,0.44T13.7,9.1q0,0.5-0.3,0.94t-0.75,0.81q-1.1,0.97-1.35,1.47t-0.25,1.82ZM12,22q-2.07,0-3.9-0.79q-1.82-0.79-3.17-2.14Q3.58,17.73 2.79,15.9T2,12Q2,9.92 2.79,8.1Q3.58,6.27 4.93,4.93Q6.28,3.57 8.1,2.79Q9.93,2 12,2t3.9,0.79t3.17,2.14q1.35,1.35 2.14,3.17Q22,9.92 22,12t-0.79,3.9t-2.14,3.17q-1.35,1.35-3.17,2.14T12,22Zm0-2q3.35,0 5.68-2.32T20,12T17.68,6.32T12,4T6.33,6.32T4,12t2.33,5.68T12,20Zm0-8Z"/></svg></span> Need help connecting the MCP?
+<div id="help-crumb" role="region" aria-label="Help tutorial prompt">
+    <div role="button" tabindex="0" onclick="toggleTutorial(true)" onkeydown="if(event.key==='Enter'||event.key===' ')toggleTutorial(true)" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+        <span class="h-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="18px" width="18px" fill="currentColor"><path d="M12.84,17.64q0.36-0.36 0.36-0.89t-0.36-0.89T11.95,15.5t-0.89,0.36q-0.36,0.36-0.36,0.89t0.36,0.89T11.95,18t0.89-0.36Zm-1.79-3.49H12.9q0-0.82 0.19-1.3t1.06-1.3q0.65-0.65 1.03-1.24T15.55,8.9q0-1.4-1.03-2.15T12.1,6Q10.68,6 9.79,6.75T8.55,8.55L10.2,9.2q0.13-0.45 0.56-0.97T12.1,7.7q0.8,0 1.2,0.44T13.7,9.1q0,0.5-0.3,0.94t-0.75,0.81q-1.1,0.97-1.35,1.47t-0.25,1.82ZM12,22q-2.07,0-3.9-0.79q-1.82-0.79-3.17-2.14Q3.58,17.73 2.79,15.9T2,12Q2,9.92 2.79,8.1Q3.58,6.27 4.93,4.93Q6.28,3.57 8.1,2.79Q9.93,2 12,2t3.9,0.79t3.17,2.14q1.35,1.35 2.14,3.17Q22,9.92 22,12t-0.79,3.9t-2.14,3.17q-1.35,1.35-3.17,2.14T12,22Zm0-2q3.35,0 5.68-2.32T20,12T17.68,6.32T12,4T6.33,6.32T4,12t2.33,5.68T12,20Zm0-8Z"/></svg></span>
+        <span>Need help connecting the MCP?</span>
+    </div>
+    <button type="button" aria-label="Dismiss help prompt" onclick="dismissHelpCrumb(event)" style="background:none;border:none;color:inherit;cursor:pointer;font-size:1.2rem;padding:0 0 0 6px;margin-left:4px;line-height:1;opacity:0.75;display:inline-flex;align-items:center;">&times;</button>
 </div>
 <footer class="site"><div class="wrap"><div class="foot">
 <div><a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a><p>A secure gateway that lets your AI assistant moderate your Discord server.</p></div>
@@ -490,21 +500,70 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+function dismissHelpCrumb(e) {
+    if (e) e.stopPropagation();
+    var c = document.getElementById('help-crumb');
+    if (c) c.style.display = 'none';
+    try { sessionStorage.setItem('modlink-crumb-dismissed', '1'); } catch(err) {}
+}
+try {
+    if (sessionStorage.getItem('modlink-crumb-dismissed') === '1') {
+        var c = document.getElementById('help-crumb');
+        if (c) c.style.display = 'none';
+    }
+} catch(e) {}
+
 // Copy helpers
 function copyInput(id, btn) {
     var el = document.getElementById(id);
-    navigator.clipboard.writeText(el.value).then(function() {
+    if (!el) return;
+    var val = el.value || '';
+    var onSuccess = function() {
         var old = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(function() { btn.textContent = old; }, 2000);
-    });
+        btn.textContent = 'Copied ✓';
+        btn.classList.add('btn-primary');
+        setTimeout(function() {
+            btn.textContent = old;
+            btn.classList.remove('btn-primary');
+        }, 2000);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(onSuccess).catch(function() {
+            el.select();
+            document.execCommand('copy');
+            onSuccess();
+        });
+    } else {
+        el.select();
+        document.execCommand('copy');
+        onSuccess();
+    }
 }
 function copyText(txt, btn) {
-    navigator.clipboard.writeText(txt).then(function() {
+    var onSuccess = function() {
         var old = btn.textContent;
-        btn.textContent = 'Copied!';
+        btn.textContent = 'Copied ✓';
         setTimeout(function() { btn.textContent = old; }, 2000);
-    });
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(onSuccess).catch(function() {
+            var temp = document.createElement('textarea');
+            temp.value = txt;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            onSuccess();
+        });
+    } else {
+        var temp = document.createElement('textarea');
+        temp.value = txt;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        onSuccess();
+    }
 }
 function toggleKeyVisibility(btn) {
     var el = document.getElementById('u-api-key');
