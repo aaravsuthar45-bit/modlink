@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script>try{if(localStorage.getItem("modlink-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
+<script>document.documentElement.setAttribute("data-auth-state","pending");try{if(localStorage.getItem("modlink-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
 <title>Dashboard — ModLink</title>
 <meta name="description" content="Manage ModLink AI connections, review your Discord servers and view the moderation audit log.">
 <meta name="theme-color" content="#FFFFFF">
@@ -478,8 +478,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.ML_USER) {
         window.initUserDashboard(window.ML_USER);
     } else {
-        fetch('/auth/me')
-            .then(function(r) { return r.json(); })
+        Promise.resolve().then(function() {
+            return window.ML_AUTH_PROMISE || fetch('/auth/me').then(function(r) { return r.json(); });
+        })
             .then(function(data) {
                 window.initUserDashboard(data);
             })

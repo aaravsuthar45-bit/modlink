@@ -47,9 +47,10 @@ box.lastElementChild.textContent=er?(M[er]||'Something went wrong while connecti
 box.hidden=false;}}
 
 // Check Discord user session via cookie
-fetch('/auth/me')
+window.ML_AUTH_PROMISE=fetch('/auth/me')
   .then(function(res){ return res.ok ? res.json() : {logged_in:false}; })
   .then(function(data){
+    document.documentElement.setAttribute('data-auth-state',data&&data.logged_in&&data.user?'logged-in':'logged-out');
     if(data && data.logged_in && data.user){
       window.ML_USER = data;
 
@@ -121,5 +122,5 @@ fetch('/auth/me')
       }
     }
   })
-  .catch(function(){});
+  .catch(function(){document.documentElement.setAttribute('data-auth-state','logged-out')});
 });})();

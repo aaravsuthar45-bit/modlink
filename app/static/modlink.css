@@ -6,6 +6,7 @@ body{font:400 1rem/1.65 var(--font);color:var(--body);background:var(--paper);mi
 main{flex:1}
 a{color:var(--ink)}
 :focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+:root[data-auth-state="pending"] a[href*="/auth/discord/login"]{visibility:hidden}
 h1,h2,h3{color:var(--ink);line-height:1.1;letter-spacing:-.03em;font-weight:800}
 .ic{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:square;stroke-linejoin:miter;flex:none}
 i[data-i]{display:inline-flex;font-style:normal}
