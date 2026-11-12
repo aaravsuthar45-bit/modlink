@@ -9,19 +9,17 @@ document.addEventListener('DOMContentLoaded',function(){
 icons();
 
 // Switch and remember the site color theme.
-var root=document.documentElement,themeButton=document.createElement('button');
-themeButton.className='theme-toggle';themeButton.type='button';themeButton.setAttribute('aria-pressed','false');
+var root=document.documentElement,themeButton=document.getElementById('theme-toggle');
 function applyTheme(theme){
   var dark=theme==='dark';root.setAttribute('data-theme',dark?'dark':'light');
+  if(!themeButton)return;
   themeButton.textContent=dark?'Light mode':'Dark mode';
   themeButton.setAttribute('aria-label',dark?'Switch to light mode':'Switch to dark mode');
   themeButton.setAttribute('aria-pressed',String(dark));
 }
 var savedTheme=null;try{savedTheme=localStorage.getItem('modlink-theme')}catch(e){}
 applyTheme(savedTheme==='dark'?'dark':'light');
-var nav=document.querySelector('.nav-links'),bar=document.querySelector('header.site .bar');
-if(nav){nav.appendChild(themeButton)}else if(bar){themeButton.style.marginLeft='auto';bar.appendChild(themeButton)}
-themeButton.addEventListener('click',function(){
+if(themeButton)themeButton.addEventListener('click',function(){
   var theme=root.getAttribute('data-theme')==='dark'?'light':'dark';applyTheme(theme);
   try{localStorage.setItem('modlink-theme',theme)}catch(e){}
 });
