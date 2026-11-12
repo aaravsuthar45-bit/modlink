@@ -53,15 +53,14 @@ fetch('/auth/me')
     if(data && data.logged_in && data.user){
       window.ML_USER = data;
 
-      // 1. Replace Log In button in navbar with user profile badge (avatar + username + logout)
-      document.querySelectorAll('.nav-links a[href*="/auth/discord/login"]').forEach(function(btn){
-        var badge = document.createElement('div');
-        badge.className = 'user-badge';
-        badge.innerHTML = '<img class="user-avatar" src="' + data.user.avatar + '" alt="' + data.user.username + '">' +
-                          '<span class="user-name">' + data.user.username + '</span>' +
-                          '<a href="/auth/logout" class="btn btn-outline btn-sm user-logout-btn">Log out</a>';
-        btn.replaceWith(badge);
-      });
+      // Put account actions in the shared Settings menu.
+      document.querySelectorAll('.nav-links a[href*="/auth/discord/login"]').forEach(function(btn){btn.remove()});
+      var account=document.querySelector('.settings-account');
+      if(account){
+        var user=document.createElement('span');user.className='settings-user';user.textContent=data.user.username;
+        var logout=document.createElement('a');logout.href='/auth/logout';logout.className='settings-logout';logout.textContent='Log out';
+        account.appendChild(user);account.appendChild(logout);
+      }
 
       var inviteUrl = data.bot_invite_url || '';
 

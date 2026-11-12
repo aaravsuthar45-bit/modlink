@@ -71,7 +71,7 @@
 <header class="site"><div class="wrap bar">
 <a class="brand" href="/" aria-label="ModLink home"><img class="brand-logo" src="/static/logo.png" alt="ModLink Logo">ModLink</a>
 <button class="nav-toggle" type="button" aria-label="Toggle menu" aria-expanded="false" aria-controls="nav"><i data-i="menu"></i></button>
-<nav id="nav" class="nav-links" aria-label="Main"><a href="/">Home</a><a href="/dashboard" aria-current="page">Dashboard</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="btn btn-primary btn-sm" href="/auth/discord/login">Log in</a><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">Dark mode</button></nav>
+<nav id="nav" class="nav-links" aria-label="Main"><a href="/">Home</a><a href="/dashboard" aria-current="page">Dashboard</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a class="btn btn-primary btn-sm" href="/auth/discord/login">Log in</a><details class="nav-settings"><summary>Settings</summary><div class="settings-panel"><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">Dark mode</button><div class="settings-account"></div></div></details></nav>
 </div></header>
 
 <main id="main"><div class="wrap">
@@ -94,9 +94,6 @@
                 <span class="pill green">✓ Discord Verified</span>
                 <span id="u-guild-badge" class="pill blue">— servers</span>
             </div>
-        </div>
-        <div style="margin-left:auto;">
-            <a href="/auth/logout" class="btn btn-outline btn-sm">Log out</a>
         </div>
     </div>
 
