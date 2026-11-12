@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{if(localStorage.getItem("modlink-theme")==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}</script>
 <title>Privacy Policy — ModLink</title>
 <meta name="description" content="How ModLink collects, uses and protects data when you connect a Discord server to an AI assistant.">
 <meta name="theme-color" content="#FFFFFF">
@@ -45,7 +46,8 @@ header.site{position:sticky;top:0;z-index:50;background:var(--paper);border-bott
 .nav-links.open{display:flex}
 .nav-links a{height:52px;margin:0;border-bottom:1px solid var(--line)}
 .nav-links a:hover,.nav-links a[aria-current]{border-bottom-color:var(--ink)}
-.nav-links a.btn-primary{margin:var(--s3) 0 0;justify-content:center;height:48px;min-height:48px}}
+.nav-links a.btn-primary{margin:var(--s3) 0 0;justify-content:center;height:48px;min-height:48px}
+.nav-links .theme-toggle{height:48px;margin-top:var(--s3);width:100%}}
 
 /* buttons & forms */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:52px;padding:0 var(--s5);border:2px solid var(--ink);font:600 1rem var(--font);text-decoration:none;cursor:pointer;transition:background .12s,color .12s}
@@ -182,6 +184,22 @@ p,li,dd{text-wrap:pretty}
 .toc h2{font-size:1rem;margin:0 0 var(--s2);padding:0;border:0}
 .toc ol{padding-left:var(--s4)}
 .toc li{margin:0 0 var(--s1)}
+
+/* switchable dark theme */
+:root[data-theme="dark"]{color-scheme:dark;--ink:#f0f1f3;--paper:#111318;--concrete:#1c2028;--body:#d7dae0;--muted:#a4aab5;--line:#3a404b}
+:root[data-theme="dark"] .btn-primary,:root[data-theme="dark"] .btn-dark,:root[data-theme="dark"] .num,:root[data-theme="dark"] .pill.green,:root[data-theme="dark"] .notice.err,:root[data-theme="dark"] #alert.err,:root[data-theme="dark"] .skip{background:#e5e7eb;color:#111318;border-color:#e5e7eb}
+:root[data-theme="dark"] .btn-primary:hover,:root[data-theme="dark"] .btn-dark:hover,:root[data-theme="dark"] .btn-outline:hover,:root[data-theme="dark"] .btn-danger:hover{background:#303640;color:#fff}
+:root[data-theme="dark"] .btn-light{background:#f0f1f3;color:#111318;border-color:#f0f1f3}
+:root[data-theme="dark"] .btn-light:hover{background:#303640;color:#fff}
+:root[data-theme="dark"] .cta{background:#20242c}
+:root[data-theme="dark"] .cta h2{color:#fff}
+:root[data-theme="dark"] .cta p{color:#c3c7cf}
+:root[data-theme="dark"] .panel,:root[data-theme="dark"] .server-card,:root[data-theme="dark"] .stat,:root[data-theme="dark"] .box,:root[data-theme="dark"] .toc{background:var(--concrete)}
+:root[data-theme="dark"] .field input,:root[data-theme="dark"] .copy-group input,:root[data-theme="dark"] .copy-box input{background:var(--paper);color:var(--ink)}
+:root[data-theme="dark"] .theme-toggle{color:var(--ink);background:var(--paper)}
+:root[data-theme="dark"] ::selection{background:#f0f1f3;color:#111318}
+.theme-toggle{align-self:center;min-height:36px;padding:0 16px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:600 .875rem var(--font);cursor:pointer}
+.theme-toggle:hover{background:var(--concrete)}
 </style>
 <script>(function(){
 var P={asterisk:'<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>',bolt:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',key:'<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2m-4 4 3 3"/>',log:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',check:'<circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/>',alert:'<circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>',plus:'<path d="M12 5v14M5 12h14"/>',menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'};
@@ -211,6 +229,7 @@ box.lastElementChild.textContent=er?(M[er]||'Something went wrong while connecti
 box.hidden=false;}}
 });})();
 </script>
+<script src="/static/modlink.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
